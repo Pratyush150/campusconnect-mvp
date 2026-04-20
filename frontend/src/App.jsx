@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, NavLink, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, NavLink, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import Login from "./pages/Login.jsx";
 import Feed from "./pages/Feed.jsx";
@@ -6,6 +6,10 @@ import ServiceDetail from "./pages/ServiceDetail.jsx";
 import Connections from "./pages/Connections.jsx";
 import Chat from "./pages/Chat.jsx";
 import NewService from "./pages/NewService.jsx";
+import Profile from "./pages/Profile.jsx";
+import EditProfile from "./pages/EditProfile.jsx";
+import Notifications from "./pages/Notifications.jsx";
+import NotifBadge from "./NotifBadge.jsx";
 
 function Nav() {
   const { user, logout } = useAuth();
@@ -19,8 +23,9 @@ function Nav() {
       <NavLink to="/new" className={cls}>Post</NavLink>
       <NavLink to="/connections" className={cls}>Connections</NavLink>
       <NavLink to="/chats" className={cls}>Chats</NavLink>
+      <NotifBadge />
       <div style={{ marginLeft: "auto" }} className="muted">
-        {user.name} ({user.email})
+        <Link to={`/profile/${user.id}`} style={{ color: "inherit" }}>{user.name}</Link>
       </div>
       <button className="secondary" onClick={async () => { await logout(); nav("/login"); }}>
         Log out
@@ -36,10 +41,6 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function ChatList() {
-  return <Connections tab="chats" />;
-}
-
 export default function App() {
   return (
     <AuthProvider>
@@ -50,8 +51,11 @@ export default function App() {
         <Route path="/new" element={<RequireAuth><NewService /></RequireAuth>} />
         <Route path="/services/:id" element={<RequireAuth><ServiceDetail /></RequireAuth>} />
         <Route path="/connections" element={<RequireAuth><Connections /></RequireAuth>} />
-        <Route path="/chats" element={<RequireAuth><ChatList /></RequireAuth>} />
+        <Route path="/chats" element={<RequireAuth><Connections tab="chats" /></RequireAuth>} />
         <Route path="/chat/:id" element={<RequireAuth><Chat /></RequireAuth>} />
+        <Route path="/profile/:id" element={<RequireAuth><Profile /></RequireAuth>} />
+        <Route path="/me/edit" element={<RequireAuth><EditProfile /></RequireAuth>} />
+        <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/feed" replace />} />
       </Routes>
     </AuthProvider>

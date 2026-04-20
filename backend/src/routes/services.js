@@ -5,12 +5,29 @@ import { requireAuth } from "../middleware/auth.js";
 const router = Router();
 
 router.get("/", requireAuth, async (req, res) => {
-  const kind = req.query.kind;
-  const where = kind === "OFFER" || kind === "REQUEST" ? { kind } : {};
+  const { kind, q, tag } = req.query;
+  const AND = [];
+  if (kind === "OFFER" || kind === "REQUEST") AND.push({ kind });
+  if (tag) AND.push({ tags: { contains: String(tag) } });
+  if (q) {
+    const s = String(q);
+    AND.push({ OR: [{ title: { contains: s } }, { description: { contains: s } }] });
+  }
+
+  const blocks = await prisma.block.findMany({
+    where: { OR: [{ blockerId: req.userId }, { blockedId: req.userId }] },
+    select: { blockerId: true, blockedId: true },
+  });
+  const excludeIds = new Set();
+  for (const b of blocks) {
+    excludeIds.add(b.blockerId === req.userId ? b.blockedId : b.blockerId);
+  }
+  if (excludeIds.size) AND.push({ authorId: { notIn: Array.from(excludeIds) } });
+
   const services = await prisma.service.findMany({
-    where,
+    where: AND.length ? { AND } : {},
     orderBy: { createdAt: "desc" },
-    include: { author: { select: { id: true, name: true, college: true } } },
+    include: { author: { select: { id: true, name: true, college: true, avatarUrl: true } } },
     take: 100,
   });
   res.json({ services });
@@ -30,7 +47,14 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/:id", requireAuth, async (req, res) => {
   const service = await prisma.service.findUnique({
     where: { id: req.params.id },
-    include: { author: { select: { id: true, name: true, college: true, bio: true, skills: true } } },
+    include: {
+      author: {
+        select: {
+          id: true, name: true, college: true, bio: true, skills: true,
+          avatarUrl: true, year: true, major: true,
+        },
+      },
+    },
   });
   if (!service) return res.status(404).json({ error: "Not found" });
   res.json({ service });

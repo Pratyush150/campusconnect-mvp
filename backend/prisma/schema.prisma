@@ -15,6 +15,12 @@ model User {
   college   String?
   bio       String?
   skills    String?
+  avatarUrl String?
+  year      Int?
+  major     String?
+  github    String?
+  linkedin  String?
+  verified  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   services        Service[]
@@ -22,6 +28,9 @@ model User {
   receivedReqs    ConnectionRequest[] @relation("Received")
   messages        Message[]
   conversations   Conversation[]      @relation("Participants")
+  notifications   Notification[]
+  blocksOut       Block[]             @relation("Blocker")
+  blocksIn        Block[]             @relation("Blocked")
 }
 
 model Service {
@@ -68,4 +77,29 @@ model Message {
 
   sender       User         @relation(fields: [senderId],       references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  payload   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
 }

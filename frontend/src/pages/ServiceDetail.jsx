@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
 
@@ -43,7 +43,12 @@ export default function ServiceDetail() {
       <div className="card">
         <span className={`tag ${service.kind.toLowerCase()}`}>{service.kind}</span>
         <h2>{service.title}</h2>
-        <div className="muted">by {service.author.name} {service.author.college && `· ${service.author.college}`}</div>
+        <div className="muted">
+          by <Link to={`/profile/${service.author.id}`}>{service.author.name}</Link>
+          {service.author.college && ` · ${service.author.college}`}
+          {service.author.year ? ` · Year ${service.author.year}` : ""}
+          {service.author.major ? ` · ${service.author.major}` : ""}
+        </div>
         <p style={{ marginTop: 12 }}>{service.description}</p>
         {service.tags && service.tags.split(",").map((t) => <span key={t} className="tag">{t.trim()}</span>)}
         {service.author.bio && <><hr style={{ borderColor: "#334155" }} /><div className="muted">About author: {service.author.bio}</div></>}

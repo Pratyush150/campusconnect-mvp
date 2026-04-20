@@ -10,10 +10,14 @@ import cookie from "cookie";
 
 import { prisma } from "./lib/prisma.js";
 import { verifyToken } from "./middleware/auth.js";
+import { notify, setIo } from "./lib/notify.js";
 import authRoutes from "./routes/auth.js";
+import userRoutes from "./routes/users.js";
 import serviceRoutes from "./routes/services.js";
 import connectionRoutes from "./routes/connections.js";
 import conversationRoutes, { isParticipantWithAcceptedConn } from "./routes/conversations.js";
+import notificationRoutes from "./routes/notifications.js";
+import blockRoutes from "./routes/blocks.js";
 
 dotenv.config();
 
@@ -38,9 +42,12 @@ app.use(cookieParser());
 
 app.get("/", (_req, res) => res.json({ ok: true, service: "campusconnect-backend" }));
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/connections", connectionRoutes);
 app.use("/api/conversations", conversationRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/blocks", blockRoutes);
 
 app.use((err, req, res, _next) => {
   console.error("Unhandled error:", err);
@@ -50,6 +57,7 @@ app.use((err, req, res, _next) => {
 const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173", credentials: true },
 });
+setIo(io);
 
 io.use((socket, next) => {
   const raw = socket.handshake.headers.cookie;
@@ -61,7 +69,7 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
-  console.log("ws connect", socket.id, "user", socket.userId);
+  socket.join(`user:${socket.userId}`);
 
   socket.on("join", async (conversationId, ack) => {
     const allowed = await isParticipantWithAcceptedConn(socket.userId, conversationId);
@@ -80,11 +88,20 @@ io.on("connection", (socket) => {
     });
     await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
     io.to(conversationId).emit("receiveMessage", msg);
-    ack?.({ ok: true, message: msg });
-  });
 
-  socket.on("disconnect", () => {
-    console.log("ws disconnect", socket.id);
+    const convo = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { participants: { select: { id: true } } },
+    });
+    for (const p of convo.participants) {
+      if (p.id !== socket.userId) {
+        await notify(p.id, "MESSAGE", {
+          conversationId, senderId: socket.userId, senderName: msg.sender?.name,
+          preview: msg.content.slice(0, 100),
+        });
+      }
+    }
+    ack?.({ ok: true, message: msg });
   });
 });
 
