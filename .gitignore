@@ -1,0 +1,34 @@
+# dependencies
+**/node_modules/
+
+# env & secrets
+**/.env
+**/.env.local
+**/.env.*.local
+
+# TLS material — regenerated per dev machine
+backend/certs/*.pem
+
+# SQLite dev database
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/prisma/dev.db*
+
+# build outputs
+frontend/dist/
+**/.vite/
+**/*.tsbuildinfo
+
+# logs
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# the reference clone of the existing repo (not part of this project)
+existing/
