@@ -119,6 +119,10 @@ router.post("/logout", (_req, res) => {
 
 router.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.userId }, select: ME_FIELDS });
+  if (!user) {
+    res.clearCookie("token");
+    return res.status(401).json({ error: "Session no longer valid" });
+  }
   let profile = null;
   if (user.role === "doer") profile = await prisma.doerProfile.findUnique({ where: { userId: user.id } });
   if (user.role === "mentor") profile = await prisma.mentorProfile.findUnique({ where: { userId: user.id } });
