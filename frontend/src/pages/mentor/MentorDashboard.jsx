@@ -3,19 +3,18 @@ import { api } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 
 export default function MentorDashboard() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [slot, setSlot] = useState({ date: defaultDate(), startTime: "10:00", endTime: "11:00" });
   const [msg, setMsg] = useState("");
 
   const load = () => {
-    if (profile?.isApproved) {
-      api.get("/mentors/slots/mine").then((r) => setSlots(r.data.slots));
-      api.get("/mentors/bookings/mine").then((r) => setBookings(r.data.bookings));
-    }
+    if (user?.role !== "mentor" || !profile?.isApproved) return;
+    api.get("/mentors/slots/mine").then((r) => setSlots(r.data.slots)).catch(() => {});
+    api.get("/mentors/bookings/mine").then((r) => setBookings(r.data.bookings)).catch(() => {});
   };
-  useEffect(() => { load(); }, [profile?.isApproved]);
+  useEffect(() => { load(); }, [user?.role, profile?.isApproved]);
 
   if (!profile?.isApproved) return <div className="container"><div className="card"><h2>Awaiting approval</h2><p className="muted">Admin will activate your profile soon.</p></div></div>;
 

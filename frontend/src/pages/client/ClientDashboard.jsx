@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api.js";
+import { useAuth } from "../../auth.jsx";
 
 export default function ClientDashboard() {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   useEffect(() => {
-    api.get("/assignments/my-requests").then((r) => setItems(r.data.assignments));
-  }, []);
+    if (user?.role !== "client") return;
+    api.get("/assignments/my-requests").then((r) => setItems(r.data.assignments)).catch(() => {});
+  }, [user?.role]);
   return (
     <div className="container">
       <div style={{ display: "flex", alignItems: "center" }}>

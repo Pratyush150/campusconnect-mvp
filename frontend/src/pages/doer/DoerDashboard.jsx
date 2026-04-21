@@ -4,18 +4,17 @@ import { api } from "../../api.js";
 import { useAuth } from "../../auth.jsx";
 
 export default function DoerDashboard() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [available, setAvailable] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [bids, setBids] = useState([]);
 
   useEffect(() => {
-    if (profile?.isApproved) {
-      api.get("/assignments/available").then((r) => setAvailable(r.data.assignments));
-      api.get("/assignments/my-tasks").then((r) => setTasks(r.data.tasks));
-      api.get("/assignments/my-bids").then((r) => setBids(r.data.bids));
-    }
-  }, [profile?.isApproved]);
+    if (user?.role !== "doer" || !profile?.isApproved) return;
+    api.get("/assignments/available").then((r) => setAvailable(r.data.assignments)).catch(() => {});
+    api.get("/assignments/my-tasks").then((r) => setTasks(r.data.tasks)).catch(() => {});
+    api.get("/assignments/my-bids").then((r) => setBids(r.data.bids)).catch(() => {});
+  }, [user?.role, profile?.isApproved]);
 
   if (!profile?.isApproved) {
     return (

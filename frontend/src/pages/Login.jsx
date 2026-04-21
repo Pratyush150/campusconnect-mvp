@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth, dashboardPath } from "../auth.jsx";
 
 const ROLES = [
@@ -10,14 +10,14 @@ const ROLES = [
 ];
 
 export default function Login() {
-  const { login, user } = useAuth();
-  const nav = useNavigate();
+  const { login, user, loading } = useAuth();
   const [role, setRole] = useState("client");
   const [form, setForm] = useState({ email: "", password: "" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) { nav(dashboardPath(user.role)); return null; }
+  if (loading) return <div className="center">Loading…</div>;
+  if (user) return <Navigate to={dashboardPath(user.role)} replace />;
 
   const current = ROLES.find((r) => r.key === role);
 
