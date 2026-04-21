@@ -1,26 +1,44 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../../api.js";
+import { useToast, usePrompt } from "../../toast.jsx";
 
 export default function AdminAssignmentDetail() {
   const { id } = useParams();
+  const toast = useToast();
+  const prompt = usePrompt();
   const [a, setA] = useState(null);
   const [price, setPrice] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [msg, setMsg] = useState("");
 
-  const load = () => api.get(`/admin/assignments/${id}`).then((r) => setA(r.data.assignment));
+  const load = () => api.get(`/admin/assignments/${id}`).then((r) => setA(r.data.assignment)).catch(() => {});
   useEffect(() => { load(); }, [id]);
 
   if (!a) return <div className="container muted">Loading…</div>;
 
-  const act = async (fn) => { try { await fn(); load(); } catch (e) { setMsg(e.response?.data?.error || "Failed"); } };
-  const publish = () => act(() => api.put(`/admin/assignments/${a.id}/publish`));
-  const reject  = () => { const reason = prompt("Reason?"); if (reason) act(() => api.put(`/admin/assignments/${a.id}/reject`, { reason })); };
-  const assign  = (bidId) => { const p = Number(price || prompt("Final price?")); if (!p) return; act(() => api.put(`/admin/assignments/${a.id}/assign`, { bidId, finalPrice: p })); };
-  const approve = (did) => act(() => api.put(`/admin/assignments/${a.id}/approve-delivery`, { deliveryId: did }));
-  const revise  = (did) => { const fb = prompt("Feedback?"); if (fb) act(() => api.put(`/admin/assignments/${a.id}/request-revision`, { deliveryId: did, feedback: fb })); };
-  const forceRelease = () => act(() => api.put(`/admin/assignments/${a.id}/force-release`));
+  const act = async (fn, successMsg) => {
+    try { await fn(); if (successMsg) toast.success(successMsg); load(); }
+    catch (e) { toast.error(e.response?.data?.error || "Failed"); }
+  };
+  const publish = () => act(() => api.put(`/admin/assignments/${a.id}/publish`), "Published");
+  const reject  = async () => {
+    const reason = await prompt({ title: "Reject this request", label: "Reason", multiline: true, confirmLabel: "Reject" });
+    if (reason) act(() => api.put(`/admin/assignments/${a.id}/reject`, { reason }), "Rejected");
+  };
+  const assign  = async (bidId) => {
+    let p = Number(price);
+    if (!p) {
+      const v = await prompt({ title: "Final price", label: "Amount (₹)", placeholder: "1100", confirmLabel: "Assign" });
+      p = Number(v);
+    }
+    if (!p) return toast.error("Price required");
+    act(() => api.put(`/admin/assignments/${a.id}/assign`, { bidId, finalPrice: p }), "Assigned");
+  };
+  const approve = (did) => act(() => api.put(`/admin/assignments/${a.id}/approve-delivery`, { deliveryId: did }), "Approved");
+  const revise  = async (did) => {
+    const fb = await prompt({ title: "Request revision", label: "Feedback to doer", multiline: true, confirmLabel: "Request revision" });
+    if (fb) act(() => api.put(`/admin/assignments/${a.id}/request-revision`, { deliveryId: did, feedback: fb }), "Revision requested");
+  };
+  const forceRelease = () => act(() => api.put(`/admin/assignments/${a.id}/force-release`), "Escrow released");
 
   return (
     <div className="container">
@@ -90,7 +108,6 @@ export default function AdminAssignmentDetail() {
           <div key={p.id}>₹{p.amount} · {p.status} · {p.paymentType}</div>
         ))}
       </div>
-      {msg && <div className="error">{msg}</div>}
     </div>
   );
 }

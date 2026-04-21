@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate, NavLink, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth, dashboardPath } from "./auth.jsx";
+import { useTheme } from "./theme.jsx";
+
 import Login from "./pages/Login.jsx";
 import RegisterClient from "./pages/RegisterClient.jsx";
 import RegisterDoer from "./pages/RegisterDoer.jsx";
@@ -17,6 +19,8 @@ import MentorDashboard from "./pages/mentor/MentorDashboard.jsx";
 
 import MentorList from "./pages/mentors/MentorList.jsx";
 import MentorDetail from "./pages/mentors/MentorDetail.jsx";
+import BookingDetail from "./pages/BookingDetail.jsx";
+import MyBookings from "./pages/MyBookings.jsx";
 
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminAssignments from "./pages/admin/AdminAssignments.jsx";
@@ -26,11 +30,27 @@ import AdminMentors from "./pages/admin/AdminMentors.jsx";
 import AdminPayouts from "./pages/admin/AdminPayouts.jsx";
 import AdminSettings from "./pages/admin/AdminSettings.jsx";
 
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button className="theme-toggle" onClick={toggle} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+      {theme === "dark" ? "☀️" : "🌙"}
+    </button>
+  );
+}
+
 function Nav() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  if (!user) return null;
   const cls = ({ isActive }) => (isActive ? "active" : "");
+  if (!user) {
+    return (
+      <div className="nav">
+        <strong>AssignMentor</strong>
+        <div style={{ marginLeft: "auto" }}><ThemeToggle /></div>
+      </div>
+    );
+  }
   return (
     <div className="nav">
       <strong>AssignMentor</strong>
@@ -38,10 +58,12 @@ function Nav() {
         <NavLink to="/client" className={cls}>My assignments</NavLink>
         <NavLink to="/client/new" className={cls}>+ Post</NavLink>
         <NavLink to="/mentors" className={cls}>Mentors</NavLink>
+        <NavLink to="/bookings" className={cls}>Bookings</NavLink>
       </>}
       {user.role === "doer" && <>
         <NavLink to="/doer" className={cls}>Dashboard</NavLink>
         <NavLink to="/mentors" className={cls}>Mentors</NavLink>
+        <NavLink to="/bookings" className={cls}>Bookings</NavLink>
       </>}
       {user.role === "mentor" && <>
         <NavLink to="/mentor" className={cls}>My slots</NavLink>
@@ -54,10 +76,11 @@ function Nav() {
         <NavLink to="/admin/payouts" className={cls}>Payouts</NavLink>
         <NavLink to="/admin/settings" className={cls}>Settings</NavLink>
       </>}
-      <div style={{ marginLeft: "auto" }} className="muted">
-        {user.fullName} ({user.role})
+      <div style={{ marginLeft: "auto" }} className="hstack">
+        <span className="muted" style={{ fontSize: 12 }}>{user.fullName} · {user.role}</span>
+        <ThemeToggle />
+        <button className="secondary sm" onClick={async () => { await logout(); nav("/login"); }}>Log out</button>
       </div>
-      <button className="secondary" onClick={async () => { await logout(); nav("/login"); }}>Log out</button>
     </div>
   );
 }
@@ -92,6 +115,8 @@ export default function App() {
 
         <Route path="/mentors" element={<RequireRole roles={["client", "doer", "admin", "mentor"]}><MentorList /></RequireRole>} />
         <Route path="/mentors/:id" element={<RequireRole roles={["client", "doer", "admin", "mentor"]}><MentorDetail /></RequireRole>} />
+        <Route path="/bookings/:id" element={<RequireRole roles={["client", "doer", "mentor", "admin"]}><BookingDetail /></RequireRole>} />
+        <Route path="/bookings" element={<RequireRole roles={["client", "doer"]}><MyBookings /></RequireRole>} />
 
         <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminDashboard /></RequireRole>} />
         <Route path="/admin/assignments" element={<RequireRole roles={["admin"]}><AdminAssignments /></RequireRole>} />

@@ -325,6 +325,23 @@ router.post("/cron/stale-review-alert", async (_req, res) => {
   res.json({ alerted: stale.length });
 });
 
+router.post("/cron/release-unpaid-bookings", async (_req, res) => {
+  const now = new Date();
+  const stale = await prisma.mentorBooking.findMany({
+    where: { status: "pending_payment", expiresAt: { lt: now } },
+    select: { id: true, slotId: true },
+  });
+  let released = 0;
+  for (const b of stale) {
+    await prisma.$transaction([
+      prisma.mentorBooking.update({ where: { id: b.id }, data: { status: "cancelled" } }),
+      prisma.mentorSlot.update({ where: { id: b.slotId }, data: { isBooked: false } }),
+    ]);
+    released++;
+  }
+  res.json({ released });
+});
+
 router.post("/cron/reconcile-payments", async (_req, res) => {
   const oldPending = await prisma.payment.findMany({
     where: { status: "pending", createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },

@@ -63,6 +63,27 @@ async function main() {
     update: { isApproved: true },
   });
 
+  // Seed 10 mentor slots over the next 5 weekdays so the date-strip UX has something to show
+  const now = new Date();
+  const timeWindows = [
+    { start: "10:00", end: "11:00" }, { start: "11:00", end: "12:00" },
+    { start: "14:00", end: "15:00" }, { start: "16:00", end: "17:00" },
+  ];
+  let seededSlots = 0;
+  for (let i = 1; i <= 10 && seededSlots < 20; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const date = d.toISOString().slice(0, 10);
+    for (const t of timeWindows) {
+      try {
+        await prisma.mentorSlot.create({
+          data: { mentorId: mentor.id, slotDate: date, startTime: t.start, endTime: t.end, durationMin: 60 },
+        });
+        seededSlots++;
+      } catch { /* already exists */ }
+    }
+  }
+
   console.log("Seeded:");
   console.log("  admin    admin@assignmentor.local / admin123");
   console.log("  client   client@demo.local        / client123");
@@ -70,6 +91,7 @@ async function main() {
   console.log("  doer     doer@demo.local          / doer123   (approved)");
   console.log("  doer2    doer2@demo.local         / doer123   (approved)");
   console.log("  mentor   mentor@demo.local        / mentor123 (approved)");
+  console.log(`  + ${seededSlots} mentor slots across next 5 weekdays`);
 }
 
 main().finally(() => prisma.$disconnect());

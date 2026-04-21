@@ -1,43 +1,61 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../../api.js";
+import { useToast, useConfirm, usePrompt } from "../../toast.jsx";
 
 export default function AssignmentDetail() {
   const { id } = useParams();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const [a, setA] = useState(null);
-  const [msg, setMsg] = useState("");
   const [msgs, setMsgs] = useState([]);
   const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const load = () => {
-    api.get(`/assignments/my-requests/${id}`).then((r) => setA(r.data.assignment));
-    api.get(`/messages/${id}`).then((r) => setMsgs(r.data.messages));
+    api.get(`/assignments/my-requests/${id}`).then((r) => setA(r.data.assignment)).catch(() => {});
+    api.get(`/messages/${id}`).then((r) => setMsgs(r.data.messages)).catch(() => {});
   };
   useEffect(() => { load(); }, [id]);
 
   if (!a) return <div className="container muted">Loading…</div>;
 
   const pay = async () => {
-    setMsg("");
+    const go = await confirm({
+      title: `Pay ₹${a.finalPrice}?`,
+      message: "Money is held in escrow and released when you confirm delivery.",
+      confirmLabel: `Pay ₹${a.finalPrice}`,
+    });
+    if (!go) return;
+    setBusy(true);
     try {
       const o = await api.post("/payments/create-order", { assignmentId: a.id });
       await api.post("/payments/mock-capture", { paymentId: o.data.paymentId });
-      setMsg("Payment captured (mock). Doer can now start work.");
+      toast.success("Payment captured. Doer can start work.");
       load();
-    } catch (e) { setMsg(e.response?.data?.error || "Failed"); }
+    } catch (e) { toast.error(e.response?.data?.error || "Payment failed"); }
+    finally { setBusy(false); }
   };
 
-  const confirm = async () => {
-    setMsg("");
-    try { await api.post(`/assignments/my-requests/${a.id}/confirm`); setMsg("Escrow released to doer."); load(); }
-    catch (e) { setMsg(e.response?.data?.error || "Failed"); }
+  const confirmReceipt = async () => {
+    const go = await confirm({ title: "Confirm delivery?", message: "Escrow will release to the expert." });
+    if (!go) return;
+    try {
+      await api.post(`/assignments/my-requests/${a.id}/confirm`);
+      toast.success("Payment released.");
+      load();
+    } catch (e) { toast.error(e.response?.data?.error || "Failed"); }
   };
 
   const dispute = async () => {
-    const reason = prompt("Describe the issue:");
+    const reason = await prompt({ title: "Raise a dispute", label: "Describe the issue", multiline: true, confirmLabel: "Submit dispute" });
     if (!reason) return;
-    await api.post(`/assignments/my-requests/${a.id}/dispute`, { reason });
-    load();
+    try {
+      await api.post(`/assignments/my-requests/${a.id}/dispute`, { reason });
+      toast.info("Dispute raised — admin will review.");
+      load();
+    } catch (e) { toast.error(e.response?.data?.error || "Failed"); }
   };
 
   const sendMessage = async (e) => {
@@ -64,7 +82,7 @@ export default function AssignmentDetail() {
         <div className="card">
           <h3>Pay escrow to begin work</h3>
           <p className="muted">Payment is held by the platform. Released only after you confirm delivery.</p>
-          <button onClick={pay}>Pay ₹{a.finalPrice} (mock)</button>
+          <button onClick={pay} disabled={busy}>{busy ? <><span className="spinner" /> Processing…</> : `Pay ₹${a.finalPrice}`}</button>
         </div>
       )}
 
@@ -78,7 +96,7 @@ export default function AssignmentDetail() {
             </div>
           ))}
           {a.status === "delivered" && <div className="row" style={{ maxWidth: 360, marginTop: 12 }}>
-            <button className="success" onClick={confirm}>Confirm & release payment</button>
+            <button className="success" onClick={confirmReceipt}>Confirm & release payment</button>
             <button className="danger" onClick={dispute}>Raise dispute</button>
           </div>}
         </div>

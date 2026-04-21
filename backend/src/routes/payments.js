@@ -1,9 +1,11 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createOrder, verifyPayment, webhookVerify } from "../lib/payments.js";
 import { audit } from "../lib/audit.js";
 import { notifyUser } from "../lib/notify.js";
+import { createHoldBooking } from "./mentors.js";
 
 const router = Router();
 
@@ -59,6 +61,41 @@ router.post("/verify", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Unified dev endpoint: create booking + capture payment in one call.
+// Replaces three round-trips (book → create-order → mock-capture).
+router.post("/book-and-capture", requireAuth, async (req, res, next) => {
+  try {
+    if (!["client", "doer"].includes(req.userRole)) return res.status(403).json({ error: "Students only" });
+    const { slotId, mentorId, topic, durationMin } = req.body;
+    if (!slotId || !mentorId) return res.status(400).json({ error: "slotId + mentorId required" });
+
+    const booking = await createHoldBooking(req.userId, req.userRole, mentorId, slotId, topic, durationMin);
+
+    const mp = await prisma.mentorProfile.findUnique({ where: { userId: mentorId } });
+    const amount = mp?.hourlyRate || 0;
+    const order = await createOrder({ amount, receipt: `bk-${booking.id}` });
+
+    const payment = await prisma.payment.create({
+      data: {
+        payerId: req.userId,
+        amount,
+        paymentType: "mentor_booking",
+        referenceId: booking.id,
+        referenceType: "booking",
+        orderId: order.orderId,
+        status: "pending",
+      },
+    });
+    await prisma.mentorBooking.update({ where: { id: booking.id }, data: { paymentId: payment.id } });
+
+    // Mock capture
+    await capturePaymentByOrder(order.orderId, { paymentId: "mock_pay_" + Date.now(), signature: "MOCK_OK" }, req.userId);
+
+    const final = await prisma.mentorBooking.findUnique({ where: { id: booking.id } });
+    res.status(201).json({ booking: final, paymentId: payment.id });
+  } catch (e) { next(e); }
+});
+
 // Dev helper — skips Razorpay front-end dance
 router.post("/mock-capture", requireAuth, async (req, res) => {
   const { paymentId } = req.body;
@@ -105,7 +142,11 @@ async function capturePaymentByOrder(orderId, { paymentId, signature }, actorId)
       ? [
           prisma.mentorBooking.update({
             where: { id: p.referenceId },
-            data: { status: "confirmed", meetingLink: `https://meet.assignmentor.local/${p.referenceId}` },
+            data: {
+              status: "confirmed",
+              meetingLink: `https://meet.jit.si/assignmentor-${p.referenceId}-${crypto.randomBytes(4).toString("hex")}`,
+              expiresAt: null,
+            },
           }),
         ]
       : []),

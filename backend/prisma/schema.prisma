@@ -197,22 +197,26 @@ model MentorSlot {
 }
 
 model MentorBooking {
-  id           String   @id @default(cuid())
-  slotId       String
-  slot         MentorSlot @relation(fields: [slotId], references: [id])
-  mentorId     String
-  mentor       User     @relation("MentorBookings", fields: [mentorId], references: [id])
-  studentId    String
-  student      User     @relation("StudentBookings", fields: [studentId], references: [id])
-  studentRole  String
-  topic        String?
-  bookingType  String   @default("one_time")
-  meetingLink  String?
-  status       String   @default("confirmed")
-  paymentId    String?
-  rating       Int?
-  feedback     String?
-  createdAt    DateTime @default(now())
+  id                    String   @id @default(cuid())
+  slotId                String
+  slot                  MentorSlot @relation(fields: [slotId], references: [id])
+  mentorId              String
+  mentor                User     @relation("MentorBookings", fields: [mentorId], references: [id])
+  studentId             String
+  student               User     @relation("StudentBookings", fields: [studentId], references: [id])
+  studentRole           String
+  topic                 String?
+  durationMin           Int      @default(60)
+  bookingType           String   @default("one_time")
+  meetingLink           String?
+  status                String   @default("confirmed")
+  paymentId             String?
+  rating                Int?
+  feedback              String?
+  expiresAt             DateTime?
+  sessionNotes          String?
+  sessionNotesUpdatedAt DateTime?
+  createdAt             DateTime @default(now())
 }
 
 model MentorSubscription {
