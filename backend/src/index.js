@@ -2,22 +2,26 @@ import express from "express";
 import http from "http";
 import https from "https";
 import fs from "fs";
+import path from "path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+import pinoHttp from "pino-http";
 import { Server } from "socket.io";
 import cookie from "cookie";
 
-import { prisma } from "./lib/prisma.js";
-import { verifyToken } from "./middleware/auth.js";
-import { notify, setIo } from "./lib/notify.js";
+import { verifyToken, loadUser } from "./middleware/auth.js";
+import { setIo } from "./lib/notify.js";
+
 import authRoutes from "./routes/auth.js";
-import userRoutes from "./routes/users.js";
-import serviceRoutes from "./routes/services.js";
-import connectionRoutes from "./routes/connections.js";
-import conversationRoutes, { isParticipantWithAcceptedConn } from "./routes/conversations.js";
+import assignmentRoutes from "./routes/assignments.js";
+import adminRoutes from "./routes/admin.js";
+import messageRoutes from "./routes/messages.js";
+import paymentRoutes from "./routes/payments.js";
+import mentorRoutes from "./routes/mentors.js";
 import notificationRoutes from "./routes/notifications.js";
-import blockRoutes from "./routes/blocks.js";
+import uploadRoutes from "./routes/uploads.js";
+import payoutRoutes from "./routes/payouts.js";
 
 dotenv.config();
 
@@ -31,26 +35,28 @@ const server = useHttps
     )
   : http.createServer(app);
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
-    credentials: true,
-  })
-);
-app.use(express.json());
+app.use(pinoHttp({ autoLogging: { ignore: (req) => req.url === "/" || req.url?.startsWith("/uploads") } }));
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173", credentials: true }));
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+app.use(loadUser);
 
-app.get("/", (_req, res) => res.json({ ok: true, service: "campusconnect-backend" }));
+app.use("/uploads", express.static(path.resolve("uploads")));
+app.get("/", (_req, res) => res.json({ ok: true, service: "assignmentor-backend" }));
+
 app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/services", serviceRoutes);
-app.use("/api/connections", connectionRoutes);
-app.use("/api/conversations", conversationRoutes);
+app.use("/api/assignments", assignmentRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/mentors", mentorRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/blocks", blockRoutes);
+app.use("/api/uploads", uploadRoutes);
+app.use("/api/payouts", payoutRoutes);
 
 app.use((err, req, res, _next) => {
-  console.error("Unhandled error:", err);
+  if (err.status) return res.status(err.status).json({ error: err.message });
+  req.log?.error({ err: { message: err.message, stack: err.stack } }, "unhandled");
   res.status(500).json({ error: "Internal Server Error" });
 });
 
@@ -65,46 +71,15 @@ io.use((socket, next) => {
   const payload = cookies.token && verifyToken(cookies.token);
   if (!payload) return next(new Error("Unauthorized"));
   socket.userId = payload.sub;
+  socket.userRole = payload.role;
   next();
 });
 
 io.on("connection", (socket) => {
   socket.join(`user:${socket.userId}`);
-
-  socket.on("join", async (conversationId, ack) => {
-    const allowed = await isParticipantWithAcceptedConn(socket.userId, conversationId);
-    if (!allowed) return ack?.({ ok: false, error: "Forbidden" });
-    socket.join(conversationId);
-    ack?.({ ok: true });
-  });
-
-  socket.on("sendMessage", async ({ conversationId, content }, ack) => {
-    if (!conversationId || !content?.trim()) return ack?.({ ok: false, error: "Bad payload" });
-    const allowed = await isParticipantWithAcceptedConn(socket.userId, conversationId);
-    if (!allowed) return ack?.({ ok: false, error: "Forbidden" });
-    const msg = await prisma.message.create({
-      data: { conversationId, senderId: socket.userId, content: content.trim() },
-      include: { sender: { select: { id: true, name: true } } },
-    });
-    await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
-    io.to(conversationId).emit("receiveMessage", msg);
-
-    const convo = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: { participants: { select: { id: true } } },
-    });
-    for (const p of convo.participants) {
-      if (p.id !== socket.userId) {
-        await notify(p.id, "MESSAGE", {
-          conversationId, senderId: socket.userId, senderName: msg.sender?.name,
-          preview: msg.content.slice(0, 100),
-        });
-      }
-    }
-    ack?.({ ok: true, message: msg });
-  });
+  if (socket.userRole === "admin") socket.join("admins");
 });
 
 const PORT = Number(process.env.PORT) || 4000;
 const scheme = useHttps ? "https" : "http";
-server.listen(PORT, () => console.log(`🚀 API + WS on ${scheme}://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`🚀 AssignMentor API on ${scheme}://localhost:${PORT}`));

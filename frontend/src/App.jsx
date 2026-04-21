@@ -1,15 +1,30 @@
 import { Routes, Route, Navigate, NavLink, useNavigate, Link } from "react-router-dom";
-import { AuthProvider, useAuth } from "./auth.jsx";
+import { AuthProvider, useAuth, dashboardPath } from "./auth.jsx";
 import Login from "./pages/Login.jsx";
-import Feed from "./pages/Feed.jsx";
-import ServiceDetail from "./pages/ServiceDetail.jsx";
-import Connections from "./pages/Connections.jsx";
-import Chat from "./pages/Chat.jsx";
-import NewService from "./pages/NewService.jsx";
-import Profile from "./pages/Profile.jsx";
-import EditProfile from "./pages/EditProfile.jsx";
-import Notifications from "./pages/Notifications.jsx";
-import NotifBadge from "./NotifBadge.jsx";
+import RegisterClient from "./pages/RegisterClient.jsx";
+import RegisterDoer from "./pages/RegisterDoer.jsx";
+import RegisterMentor from "./pages/RegisterMentor.jsx";
+
+import ClientDashboard from "./pages/client/ClientDashboard.jsx";
+import NewAssignment from "./pages/client/NewAssignment.jsx";
+import AssignmentDetail from "./pages/client/AssignmentDetail.jsx";
+
+import DoerDashboard from "./pages/doer/DoerDashboard.jsx";
+import AvailableDetail from "./pages/doer/AvailableDetail.jsx";
+import TaskDetail from "./pages/doer/TaskDetail.jsx";
+
+import MentorDashboard from "./pages/mentor/MentorDashboard.jsx";
+
+import MentorList from "./pages/mentors/MentorList.jsx";
+import MentorDetail from "./pages/mentors/MentorDetail.jsx";
+
+import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
+import AdminAssignments from "./pages/admin/AdminAssignments.jsx";
+import AdminAssignmentDetail from "./pages/admin/AdminAssignmentDetail.jsx";
+import AdminDoers from "./pages/admin/AdminDoers.jsx";
+import AdminMentors from "./pages/admin/AdminMentors.jsx";
+import AdminPayouts from "./pages/admin/AdminPayouts.jsx";
+import AdminSettings from "./pages/admin/AdminSettings.jsx";
 
 function Nav() {
   const { user, logout } = useAuth();
@@ -18,26 +33,40 @@ function Nav() {
   const cls = ({ isActive }) => (isActive ? "active" : "");
   return (
     <div className="nav">
-      <strong>CampusConnect</strong>
-      <NavLink to="/feed" className={cls}>Feed</NavLink>
-      <NavLink to="/new" className={cls}>Post</NavLink>
-      <NavLink to="/connections" className={cls}>Connections</NavLink>
-      <NavLink to="/chats" className={cls}>Chats</NavLink>
-      <NotifBadge />
+      <strong>AssignMentor</strong>
+      {user.role === "client" && <>
+        <NavLink to="/client" className={cls}>My assignments</NavLink>
+        <NavLink to="/client/new" className={cls}>+ Post</NavLink>
+        <NavLink to="/mentors" className={cls}>Mentors</NavLink>
+      </>}
+      {user.role === "doer" && <>
+        <NavLink to="/doer" className={cls}>Dashboard</NavLink>
+        <NavLink to="/mentors" className={cls}>Mentors</NavLink>
+      </>}
+      {user.role === "mentor" && <>
+        <NavLink to="/mentor" className={cls}>My slots</NavLink>
+      </>}
+      {user.role === "admin" && <>
+        <NavLink to="/admin" className={cls}>Overview</NavLink>
+        <NavLink to="/admin/assignments" className={cls}>Assignments</NavLink>
+        <NavLink to="/admin/doers" className={cls}>Doers</NavLink>
+        <NavLink to="/admin/mentors" className={cls}>Mentors</NavLink>
+        <NavLink to="/admin/payouts" className={cls}>Payouts</NavLink>
+        <NavLink to="/admin/settings" className={cls}>Settings</NavLink>
+      </>}
       <div style={{ marginLeft: "auto" }} className="muted">
-        <Link to={`/profile/${user.id}`} style={{ color: "inherit" }}>{user.name}</Link>
+        {user.fullName} ({user.role})
       </div>
-      <button className="secondary" onClick={async () => { await logout(); nav("/login"); }}>
-        Log out
-      </button>
+      <button className="secondary" onClick={async () => { await logout(); nav("/login"); }}>Log out</button>
     </div>
   );
 }
 
-function RequireAuth({ children }) {
+function RequireRole({ roles, children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="center">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (!roles.includes(user.role)) return <Navigate to={dashboardPath(user.role)} replace />;
   return children;
 }
 
@@ -47,17 +76,39 @@ export default function App() {
       <Nav />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/feed" element={<RequireAuth><Feed /></RequireAuth>} />
-        <Route path="/new" element={<RequireAuth><NewService /></RequireAuth>} />
-        <Route path="/services/:id" element={<RequireAuth><ServiceDetail /></RequireAuth>} />
-        <Route path="/connections" element={<RequireAuth><Connections /></RequireAuth>} />
-        <Route path="/chats" element={<RequireAuth><Connections tab="chats" /></RequireAuth>} />
-        <Route path="/chat/:id" element={<RequireAuth><Chat /></RequireAuth>} />
-        <Route path="/profile/:id" element={<RequireAuth><Profile /></RequireAuth>} />
-        <Route path="/me/edit" element={<RequireAuth><EditProfile /></RequireAuth>} />
-        <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
-        <Route path="*" element={<Navigate to="/feed" replace />} />
+        <Route path="/register/client" element={<RegisterClient />} />
+        <Route path="/register/doer" element={<RegisterDoer />} />
+        <Route path="/register/mentor" element={<RegisterMentor />} />
+
+        <Route path="/client" element={<RequireRole roles={["client"]}><ClientDashboard /></RequireRole>} />
+        <Route path="/client/new" element={<RequireRole roles={["client"]}><NewAssignment /></RequireRole>} />
+        <Route path="/client/assignments/:id" element={<RequireRole roles={["client"]}><AssignmentDetail /></RequireRole>} />
+
+        <Route path="/doer" element={<RequireRole roles={["doer"]}><DoerDashboard /></RequireRole>} />
+        <Route path="/doer/available/:id" element={<RequireRole roles={["doer"]}><AvailableDetail /></RequireRole>} />
+        <Route path="/doer/tasks/:id" element={<RequireRole roles={["doer"]}><TaskDetail /></RequireRole>} />
+
+        <Route path="/mentor" element={<RequireRole roles={["mentor"]}><MentorDashboard /></RequireRole>} />
+
+        <Route path="/mentors" element={<RequireRole roles={["client", "doer", "admin", "mentor"]}><MentorList /></RequireRole>} />
+        <Route path="/mentors/:id" element={<RequireRole roles={["client", "doer", "admin", "mentor"]}><MentorDetail /></RequireRole>} />
+
+        <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminDashboard /></RequireRole>} />
+        <Route path="/admin/assignments" element={<RequireRole roles={["admin"]}><AdminAssignments /></RequireRole>} />
+        <Route path="/admin/assignments/:id" element={<RequireRole roles={["admin"]}><AdminAssignmentDetail /></RequireRole>} />
+        <Route path="/admin/doers" element={<RequireRole roles={["admin"]}><AdminDoers /></RequireRole>} />
+        <Route path="/admin/mentors" element={<RequireRole roles={["admin"]}><AdminMentors /></RequireRole>} />
+        <Route path="/admin/payouts" element={<RequireRole roles={["admin"]}><AdminPayouts /></RequireRole>} />
+        <Route path="/admin/settings" element={<RequireRole roles={["admin"]}><AdminSettings /></RequireRole>} />
+
+        <Route path="*" element={<Home />} />
       </Routes>
     </AuthProvider>
   );
+}
+
+function Home() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="center">Loading…</div>;
+  return <Navigate to={user ? dashboardPath(user.role) : "/login"} replace />;
 }

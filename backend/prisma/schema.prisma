@@ -8,98 +8,327 @@ datasource db {
 }
 
 model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String
+  fullName     String
+  phone        String?
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doerProfile    DoerProfile?
+  mentorProfile  MentorProfile?
+
+  clientRequests         AssignmentRequest[] @relation("ClientRequests")
+  assignedTasks          AssignmentRequest[] @relation("AssignedDoer")
+  bids                   AssignmentBid[]
+  deliveries             AssignmentDelivery[]
+
+  adminMessagesTo        AdminMessage[]      @relation("ToUser")
+  adminMessagesFrom      AdminMessage[]      @relation("FromUser")
+
+  mentorSlots            MentorSlot[]        @relation("MentorSlots")
+  mentorBookingsAsMentor MentorBooking[]     @relation("MentorBookings")
+  mentorBookingsAsStudent MentorBooking[]    @relation("StudentBookings")
+  subscriptionsAsMentor  MentorSubscription[] @relation("MentorSubs")
+  subscriptionsAsStudent MentorSubscription[] @relation("StudentSubs")
+
+  payments               Payment[]
+  payouts                Payout[]
+  bankAccounts           BankAccount[]
+
+  notifications          Notification[]
+  refreshTokens          RefreshToken[]
+  mentorInvites          MentorInvite[]      @relation("InviteCreator")
+  auditActions           AuditLog[]          @relation("Actor")
+}
+
+model DoerProfile {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills         String
+  bio            String?
+  portfolioUrls  String?
+  education      String?
+  rating         Float    @default(0)
+  totalCompleted Int      @default(0)
+  isApproved     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model MentorProfile {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline        String
+  institution     String
+  bio             String
+  expertiseAreas  String
+  yearsExperience Int      @default(0)
+  linkedinUrl     String?
+  hourlyRate      Int
+  monthlySubRate  Int?
+  sessionsLimit   Int?
+  rating          Float    @default(0)
+  totalSessions   Int      @default(0)
+  isApproved      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+}
+
+model RefreshToken {
   id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  college   String?
-  bio       String?
-  skills    String?
-  avatarUrl String?
-  year      Int?
-  major     String?
-  github    String?
-  linkedin  String?
-  verified  Boolean  @default(false)
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
   createdAt DateTime @default(now())
-
-  services        Service[]
-  sentRequests    ConnectionRequest[] @relation("Sent")
-  receivedReqs    ConnectionRequest[] @relation("Received")
-  messages        Message[]
-  conversations   Conversation[]      @relation("Participants")
-  notifications   Notification[]
-  blocksOut       Block[]             @relation("Blocker")
-  blocksIn        Block[]             @relation("Blocked")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Service {
-  id          String   @id @default(cuid())
-  kind        String
-  title       String
-  description String
-  tags        String?
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id])
-  createdAt   DateTime @default(now())
+model MentorInvite {
+  id        String    @id @default(cuid())
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String
+  creator   User      @relation("InviteCreator", fields: [createdBy], references: [id])
+  createdAt DateTime  @default(now())
 }
 
-model ConnectionRequest {
-  id          String    @id @default(cuid())
-  senderId    String
-  receiverId  String
-  serviceId   String?
-  status      String    @default("PENDING")
-  message     String?
-  createdAt   DateTime  @default(now())
-  respondedAt DateTime?
+model AssignmentRequest {
+  id             String    @id @default(cuid())
+  clientId       String
+  client         User      @relation("ClientRequests", fields: [clientId], references: [id])
+  title          String
+  description    String
+  subject        String?
+  assignmentType String?
+  deadline       DateTime
+  budgetMin      Int?
+  budgetMax      Int?
+  attachments    String?
+  status         String    @default("pending")
+  adminNotes     String?
+  assignedDoerId String?
+  assignedDoer   User?     @relation("AssignedDoer", fields: [assignedDoerId], references: [id])
+  finalPrice     Int?
+  clientPaid     Boolean   @default(false)
+  doerPaidOut    Boolean   @default(false)
+  revisionCount  Int       @default(0)
+  contactFlagged Boolean   @default(false)
+  contactFlags   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  sender   User @relation("Sent",     fields: [senderId],   references: [id])
-  receiver User @relation("Received", fields: [receiverId], references: [id])
-
-  @@unique([senderId, receiverId])
+  bids       AssignmentBid[]
+  deliveries AssignmentDelivery[]
+  messages   AdminMessage[]
+  payments   Payment[]
+  audits     AuditLog[]
 }
 
-model Conversation {
-  id           String    @id @default(cuid())
-  participants User[]    @relation("Participants")
-  messages     Message[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-}
-
-model Message {
+model AssignmentBid {
   id             String   @id @default(cuid())
-  content        String
-  senderId       String
-  conversationId String
+  assignmentId   String
+  assignment     AssignmentRequest @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  doerId         String
+  doer           User     @relation(fields: [doerId], references: [id])
+  bidAmount      Int
+  estimatedHours Int?
+  coverNote      String?
+  status         String   @default("pending")
+  adminNotes     String?
+  contactFlagged Boolean  @default(false)
   createdAt      DateTime @default(now())
 
-  sender       User         @relation(fields: [senderId],       references: [id])
-  conversation Conversation @relation(fields: [conversationId], references: [id])
+  @@unique([assignmentId, doerId])
+}
+
+model AssignmentDelivery {
+  id             String   @id @default(cuid())
+  assignmentId   String
+  assignment     AssignmentRequest @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  doerId         String
+  doer           User     @relation(fields: [doerId], references: [id])
+  files          String
+  version        Int      @default(1)
+  doerNotes      String?
+  adminReview    String   @default("pending")
+  adminFeedback  String?
+  createdAt      DateTime @default(now())
+}
+
+model AdminMessage {
+  id           String   @id @default(cuid())
+  assignmentId String?
+  assignment   AssignmentRequest? @relation(fields: [assignmentId], references: [id])
+  fromAdmin    Boolean  @default(true)
+  toUserId     String
+  toUser       User     @relation("ToUser", fields: [toUserId], references: [id])
+  fromUserId   String?
+  fromUser     User?    @relation("FromUser", fields: [fromUserId], references: [id])
+  message      String
+  attachments  String?
+  isRead       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([assignmentId, toUserId, createdAt])
+}
+
+model MentorSlot {
+  id             String    @id @default(cuid())
+  mentorId       String
+  mentor         User      @relation("MentorSlots", fields: [mentorId], references: [id], onDelete: Cascade)
+  slotDate       String
+  startTime      String
+  endTime        String
+  durationMin    Int       @default(60)
+  isBooked       Boolean   @default(false)
+  isRecurring    Boolean   @default(false)
+  recurrenceDay  Int?
+  createdAt      DateTime  @default(now())
+  bookings       MentorBooking[]
+
+  @@unique([mentorId, slotDate, startTime])
+}
+
+model MentorBooking {
+  id           String   @id @default(cuid())
+  slotId       String
+  slot         MentorSlot @relation(fields: [slotId], references: [id])
+  mentorId     String
+  mentor       User     @relation("MentorBookings", fields: [mentorId], references: [id])
+  studentId    String
+  student      User     @relation("StudentBookings", fields: [studentId], references: [id])
+  studentRole  String
+  topic        String?
+  bookingType  String   @default("one_time")
+  meetingLink  String?
+  status       String   @default("confirmed")
+  paymentId    String?
+  rating       Int?
+  feedback     String?
+  createdAt    DateTime @default(now())
+}
+
+model MentorSubscription {
+  id                 String   @id @default(cuid())
+  mentorId           String
+  mentor             User     @relation("MentorSubs", fields: [mentorId], references: [id])
+  studentId          String
+  student            User     @relation("StudentSubs", fields: [studentId], references: [id])
+  studentRole        String
+  planType           String   @default("monthly")
+  price              Int
+  status             String   @default("active")
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  autoRenew          Boolean  @default(true)
+  sessionsUsed       Int      @default(0)
+  sessionsLimit      Int?
+  paymentId          String?
+  createdAt          DateTime @default(now())
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  payerId           String
+  payer             User     @relation(fields: [payerId], references: [id])
+  amount            Int
+  currency          String   @default("INR")
+  paymentType       String
+  referenceId       String?
+  referenceType     String?
+  assignmentId      String?
+  assignment        AssignmentRequest? @relation(fields: [assignmentId], references: [id])
+  orderId           String?  @unique
+  providerPaymentId String?
+  providerSignature String?
+  status            String   @default("pending")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  earnings PlatformEarning[]
+}
+
+model PlatformEarning {
+  id             String   @id @default(cuid())
+  paymentId      String
+  payment        Payment  @relation(fields: [paymentId], references: [id])
+  grossAmount    Int
+  platformFee    Int
+  providerPayout Int
+  feePercent     Float
+  earningType    String
+  status         String   @default("pending")
+  payoutDate     DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model Payout {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  amount         Int
+  bankDetails    String
+  status         String   @default("pending")
+  adminApproved  Boolean  @default(false)
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountName   String
+  accountNumber String
+  ifscCode      String
+  upiId         String?
+  isVerified    Boolean  @default(false)
+  isPrimary     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedBy String?
+  updatedAt DateTime @updatedAt
 }
 
 model Notification {
-  id        String    @id @default(cuid())
-  userId    String
-  type      String
-  payload   String
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id])
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  message       String
+  type          String
+  referenceId   String?
+  referenceType String?
+  isRead        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
 
   @@index([userId, createdAt])
 }
 
-model Block {
-  id        String   @id @default(cuid())
-  blockerId String
-  blockedId String
-  createdAt DateTime @default(now())
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  actor        User?    @relation("Actor", fields: [actorId], references: [id])
+  assignmentId String?
+  assignment   AssignmentRequest? @relation(fields: [assignmentId], references: [id])
+  entity       String
+  entityId     String
+  action       String
+  previousState String?
+  newState     String?
+  metadata     String?
+  createdAt    DateTime @default(now())
 
-  blocker User @relation("Blocker", fields: [blockerId], references: [id])
-  blocked User @relation("Blocked", fields: [blockedId], references: [id])
-
-  @@unique([blockerId, blockedId])
+  @@index([entity, entityId, createdAt])
 }

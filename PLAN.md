@@ -1,104 +1,110 @@
-# CampusConnect — Master Technical Plan
+# AssignMentor — Master Plan
 
-**One-line pitch:** A secure, intent-based networking platform that connects students for academic collaboration, skill exchange, and meaningful interactions within verified campus communities.
+> **Pivot note (2026-04-21):** This repo was originally "CampusConnect" (peer-to-peer, consent-gated chat for students). It has been fully rewritten as **AssignMentor** — a two-channel revenue platform. All peer-to-peer code (feed, services, connections, conversations, blocks, ratings, suggestions, chat) has been deleted.
 
-**Differentiator:** Unlike generic social apps, every interaction starts with explicit intent ("I need help with DSA", "I can teach React") and chat only opens after mutual consent (connection request accepted).
+## One-line pitch
 
----
+A middleman assignment marketplace + paid mentorship portal, where **Clients and Doers never communicate directly** — all transactions flow through Admin, so platform revenue can't leak off-platform.
 
-## Existing assets (as of 2026-04-20)
+## Two revenue channels
 
-On GitHub (`Pratyush150/...`):
+| Channel                 | Flow                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| Assignment marketplace  | Client posts → Admin reviews & publishes anonymized → Doers bid → Admin assigns → Client pays escrow → Doer delivers → Admin reviews → Client receives → payout |
+| Mentorship portal       | Verified mentors (IIT alumni / pros) list profiles + slots + monthly plans → Client or Doer books → pays → attends session → rates |
 
-| Repo                         | Purpose                                                 | Stack                                           | State                    |
-| ---------------------------- | ------------------------------------------------------- | ----------------------------------------------- | ------------------------ |
-| `CampusConnect`              | Monorepo — frontend + backend + extras + SQL backup     | React 19 / Vite + Node/Express 5 / Prisma / PG  | Most recent, works       |
-| `campusconnect-frontend`     | Vite React app                                          | React + Tailwind + Socket.io client             | Ships                    |
-| `campusconnect-backend`      | Express API + Prisma schema                             | Express 5 + Prisma + Postgres + Socket.io       | Ships                    |
-| `Campusconnect-code-repo`    | Empty placeholder                                       | —                                               | Ignore                   |
+## Non-negotiable invariants (enforced in code)
 
-Existing schema has: `User`, `Student`, `Mentor`, `Post`, `Resource`, `Event`, `Follow`, `Opportunity`, `Conversation`, `Message`, `CampusWall`, `College`. **What's missing for the new vision**: a `Service` model (offer/request help) and a consent-gated `ConnectionRequest` model — the current `Follow` is LinkedIn-style (one-way), not handshake-based.
+1. **Isolation.** No API, DB query, socket event, or UI component ever leaks Client identity to Doer or vice versa.
+2. **Escrow-first.** No assignment work begins without captured payment.
+3. **Admin gateway.** All deliveries pass through Admin review. Direct Doer→Client transfer is architecturally impossible.
+4. **Payment before access.** Mentor sessions require captured payment or active subscription.
+5. **Single bid per doer per assignment** (DB unique constraint).
+6. **Commission always taken** — automatic earnings split.
+7. **Audit trail** on every assignment/payment/payout state change.
+8. **Idempotent webhooks.**
+9. **Rate limiting** on auth endpoints.
+10. **Contact-info scanner** on every user-submitted text field — flags to admin, never auto-rejects.
 
-## Local-dev stack (this repo)
+## Roles
 
-To get running on localhost fast without a Postgres install in WSL:
+| Role    | Signup                          | Can                                                     |
+| ------- | ------------------------------- | ------------------------------------------------------- |
+| ADMIN   | Seeded / invite-only            | See everything, match clients↔doers, approve, refund    |
+| CLIENT  | Public `/register/client`       | Post requirements, pay, receive delivery                |
+| DOER    | Public `/register/doer`         | Bid on admin-approved listings, deliver files           |
+| MENTOR  | Admin invite `/register/mentor` | Publish profile, manage slots, run paid sessions        |
 
-- **Backend:** Node 20 + Express 5 + Prisma + **SQLite** (file DB, no server) + Socket.io + JWT
-- **Frontend:** React 19 + Vite + Tailwind + Socket.io client
-- **Auth:** JWT in httpOnly cookie, email/password (Phase 1); college-email verification (Phase 2)
-- **Real-time:** Socket.io rooms keyed by `conversationId`
+## Architecture (this repo)
 
-Switching the datasource back to Postgres is a one-line change in `schema.prisma` once you deploy.
+| Layer     | Choice                                                       | Notes                                                    |
+| --------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| Backend   | Node 20 + Express 5 + Prisma + Socket.io                     | JWT auth w/ httpOnly cookie, pino logging                |
+| Database  | SQLite (dev) → Postgres (prod — one-line prisma switch)      | Migrations committed                                     |
+| Frontend  | React 18 + Vite + React Router                               | Role-specific dashboards, no public feed                 |
+| Payments  | **Mock adapter** — real Razorpay is a drop-in                | See `src/lib/payments.js`                                |
+| Email     | Nodemailer SMTP (optional) → console fallback                | OTP + notifications                                      |
+| Files     | Local `uploads/` dir (dev) → S3/R2 (prod — swap in multer-s3)| Attachments on requirements, deliveries, portfolios      |
+| Realtime  | Socket.io (admin gets live flags + new-request pings)        | No peer-to-peer chat                                     |
 
----
+## Ports (dev)
 
-## Phase roadmap
+| Service  | URL                     |
+| -------- | ----------------------- |
+| Backend  | http://localhost:4000   |
+| Frontend | http://localhost:5173   |
 
-| Phase | Theme                   | Duration target | Deliverable                                                                 |
-| ----- | ----------------------- | --------------- | --------------------------------------------------------------------------- |
-| 1     | MVP — core loop         | 1–2 weeks       | Signup → create Service → send ConnectionRequest → accept → chat works      |
-| 2     | Strong product          | 2–3 weeks       | Search/filter, profiles, notifications, ratings, polished UI                |
-| 3     | Smart differentiation   | 3–4 weeks       | AI skill tagging, match scoring, chat suggestions                           |
-| 4     | Scale & multi-campus    | 4+ weeks        | Multi-college, admin dashboard, analytics, moderation                       |
+## Data model (see `backend/prisma/schema.prisma`)
 
-Details for each phase live in `plans/phase-1.md` … `plans/phase-4.md`.
+Core tables: `User` (role + role-specific profile), `AssignmentRequest`, `AssignmentBid`, `AssignmentDelivery`, `AdminMessage`, `MentorSlot`, `MentorBooking`, `MentorSubscription`, `Payment`, `PlatformEarning`, `Payout`, `BankAccount`, `PlatformSetting`, `Notification`, `AuditLog`.
 
----
+## Revenue-leakage defenses (test cases)
 
-## Architecture diagram (textual)
+See `plans/leakage-matrix.md` for the full list (L1–L15). Key ones implemented:
 
-```
-          ┌──────────────────┐   HTTP+JSON    ┌────────────────────────┐
-          │  React (Vite)    │ ◀────────────▶ │  Express 5 API         │
-          │  Tailwind + rrv7 │                │  /api/auth             │
-          │  Socket.io-cli   │ ◀── WS ──────▶ │  /api/services         │
-          └──────────────────┘                │  /api/connections      │
-                                              │  /api/conversations    │
-                                              │  Socket.io (rooms)     │
-                                              └──────────┬─────────────┘
-                                                         │ Prisma
-                                                         ▼
-                                              ┌────────────────────────┐
-                                              │  SQLite (dev)          │
-                                              │  → Postgres (prod)     │
-                                              └────────────────────────┘
-```
+- **L1** Admin reviews client text before publishing; `contactScanner` middleware flags phone/email/IG/Telegram/WhatsApp.
+- **L2** Admin reviews doer deliveries before forwarding.
+- **L5** Escrow: `in_progress` is unreachable without `payments.status=captured`.
+- **L6** Doer never sees client identity — route responses strip those fields even from admin-intended queries.
+- **L13** DB unique constraint on `(mentorId, slotDate, startTime)` + transaction on booking.
+- **L15** Stale-review cron warns admin.
 
-## Directory plan (this working copy)
+## Phase map (sprints)
 
-```
-/root/campusconnect/
-├── PLAN.md                   # this file
-├── plans/
-│   ├── phase-1.md            # MVP — start here
-│   ├── phase-2.md
-│   ├── phase-3.md
-│   └── phase-4.md
-├── backend/                  # Express + Prisma + SQLite
-│   ├── prisma/schema.prisma
-│   ├── src/
-│   │   ├── index.js          # app + socket.io bootstrap
-│   │   ├── routes/
-│   │   ├── controllers/
-│   │   ├── middleware/auth.js
-│   │   └── lib/prisma.js
-│   ├── .env                  # DATABASE_URL, JWT_SECRET, PORT
-│   └── package.json
-├── frontend/                 # React + Vite
-│   ├── index.html
-│   ├── src/
-│   │   ├── main.jsx
-│   │   ├── App.jsx
-│   │   ├── api.js            # axios client
-│   │   ├── socket.js         # socket.io-client singleton
-│   │   └── pages/{Login,Feed,ServiceDetail,Connections,Chat}.jsx
-│   └── package.json
-└── existing/                 # clone of Pratyush150/CampusConnect (reference)
-```
+Files under `plans/`:
 
-## Ports
+| Phase | Sprint   | Theme                                                                          | Status    |
+| ----- | -------- | ------------------------------------------------------------------------------ | --------- |
+| 1     | Sprint 1 | Foundation — schema, auth, 4 role signups, admin/dashboards shell              | **shipped** |
+| 2     | Sprint 2 | Assignment core — post, publish, bid, assign, admin messaging, contact scanner | **shipped** |
+| 3     | Sprint 3 | Payment & delivery — mock Razorpay escrow, upload, review, release             | **shipped** |
+| 4     | Sprint 4 | Mentorship — mentor invite, profile, slots, booking, session completion        | **shipped (subscriptions stubbed)** |
+| 5     | Sprint 5 | Polish & launch — revenue dashboards, payouts, cron, Razorpay swap-in          | pending   |
 
-| Service  | Port | URL                         |
-| -------- | ---- | --------------------------- |
-| Backend  | 4000 | http://localhost:4000       |
-| Frontend | 5173 | http://localhost:5173       |
+## What is real vs. stubbed in this repo
+
+| Area                  | Status                                          |
+| --------------------- | ----------------------------------------------- |
+| Auth + roles          | Real, production-shaped                         |
+| Assignment lifecycle  | Real end-to-end (state machine enforced)        |
+| Contact scanner       | Real (regex + flag)                             |
+| Admin messaging       | Real, role-scoped threads                       |
+| Mentor slots/bookings | Real                                            |
+| Mentor subscriptions  | Stub (record-only, no auto-renewal cron)        |
+| Payments              | **Mock**: `POST /api/payments/mock-capture` simulates Razorpay success. Swap to real Razorpay in `src/lib/payments.js` |
+| File storage          | Local `uploads/` — swap to S3/R2 via multer-s3  |
+| Email                 | SMTP if configured, else console log            |
+| Cron jobs             | Endpoints exist (`/api/admin/cron/*`); schedule via node-cron before launch |
+| Audit log             | Real, on every state change                     |
+
+## Production launch checklist
+
+See `plans/launch-checklist.md`. Key items:
+
+- [ ] Swap SQLite → Postgres (`datasource db { provider = "postgresql" }`)
+- [ ] Provide real `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET`, wire `verifyPayment` in `src/lib/payments.js`
+- [ ] Configure real SMTP (Resend recommended in India)
+- [ ] Move uploads to S3/R2 (add signed-URL endpoint)
+- [ ] Add node-cron scheduler for `/api/admin/cron/auto-complete` + reconciliation
+- [ ] Enable Sentry
+- [ ] HTTPS via Caddy/nginx in front
