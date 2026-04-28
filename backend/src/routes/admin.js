@@ -14,9 +14,13 @@ router.use(requireAuth, requireRole("admin"));
 
 // ---- Dashboard ----
 router.get("/dashboard", async (_req, res) => {
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [
     usersByRole, reqCounts, paymentsAgg, openFlags,
     pendingBids, pendingReviews, pendingPayouts, earningsSum,
+    activeAssignments, capturedLast7d, earningsLast7d, requestsLast7d,
+    flaggedQueue, pendingReviewQueue, pendingPayoutQueue,
+    recentActivity,
   ] = await Promise.all([
     prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
     prisma.assignmentRequest.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -26,12 +30,47 @@ router.get("/dashboard", async (_req, res) => {
     prisma.assignmentDelivery.count({ where: { adminReview: "pending" } }),
     prisma.payout.count({ where: { status: "pending" } }),
     prisma.platformEarning.aggregate({ _sum: { platformFee: true } }),
+    prisma.assignmentRequest.count({ where: { status: { in: ["assigned", "in_progress", "review", "revision", "delivered"] } } }),
+    prisma.payment.aggregate({ where: { status: "captured", createdAt: { gte: since7d } }, _sum: { amount: true } }),
+    prisma.platformEarning.aggregate({ where: { createdAt: { gte: since7d } }, _sum: { platformFee: true } }),
+    prisma.assignmentRequest.count({ where: { createdAt: { gte: since7d } } }),
+    prisma.assignmentRequest.findMany({
+      where: { contactFlagged: true, status: "pending" },
+      orderBy: { createdAt: "desc" }, take: 5,
+      select: { id: true, title: true, createdAt: true, contactFlags: true },
+    }),
+    prisma.assignmentDelivery.findMany({
+      where: { adminReview: "pending" },
+      orderBy: { createdAt: "asc" }, take: 5,
+      select: { id: true, assignmentId: true, version: true, createdAt: true, assignment: { select: { title: true } } },
+    }),
+    prisma.payout.findMany({
+      where: { status: "pending" },
+      orderBy: { createdAt: "asc" }, take: 5,
+      select: { id: true, amount: true, createdAt: true, user: { select: { fullName: true } } },
+    }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" }, take: 20,
+      select: { id: true, entity: true, entityId: true, action: true, newState: true, createdAt: true, actor: { select: { fullName: true, role: true } } },
+    }),
   ]);
   res.json({
     usersByRole, requestsByStatus: reqCounts,
     payments: { capturedTotal: paymentsAgg._sum.amount || 0, count: paymentsAgg._count },
     openFlags, pendingBids, pendingReviews, pendingPayouts,
     platformEarningsTotal: earningsSum._sum.platformFee || 0,
+    activeAssignments,
+    last7d: {
+      capturedAmount: capturedLast7d._sum.amount || 0,
+      platformFee: earningsLast7d._sum.platformFee || 0,
+      newRequests: requestsLast7d,
+    },
+    queues: {
+      flagged: flaggedQueue,
+      pendingReview: pendingReviewQueue,
+      pendingPayout: pendingPayoutQueue,
+    },
+    recentActivity,
   });
 });
 
@@ -200,7 +239,7 @@ router.post("/mentors/invite", async (req, res) => {
     data: { email, token, expiresAt, createdBy: req.userId },
   });
   const url = `${process.env.FRONTEND_ORIGIN || "http://localhost:5173"}/register/mentor?token=${token}`;
-  await sendOtp(email, `Your AssignMentor invite link: ${url}`);
+  await sendOtp(email, `Your CampusConnect invite link: ${url}`);
   res.json({ inviteId: inv.id, url });
 });
 

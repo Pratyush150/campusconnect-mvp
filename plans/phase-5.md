@@ -11,7 +11,7 @@
 - **Expiring pending bookings**: `MentorBooking.expiresAt` set to `+15 min` when created; cron `POST /api/admin/cron/release-unpaid-bookings` releases slots whose bookings stayed unpaid past the window. Fixes slot-leakage.
 
 ### B. Live session tools
-- **Video call via Jitsi Meet**: platform-issued room URL `https://meet.jit.si/assignmentor-<bookingId>-<rand>`. Generated on `capture` (when booking becomes `confirmed`). Both sides see a **Join call** button on the booking detail page. No API key, no third-party auth.
+- **Video call via Jitsi Meet**: platform-issued room URL `https://meet.jit.si/campusconnect-<bookingId>-<rand>`. Generated on `capture` (when booking becomes `confirmed`). Both sides see a **Join call** button on the booking detail page. No API key, no third-party auth.
 - **Session notes board**: new `MentorBooking.sessionNotes` field (plus `sessionNotesUpdatedAt`). Mentor has an autosave textarea (2s debounce) on the booking detail page; student sees the same page with notes as read-only markdown. Post-session the notes are the student's takeaway. Future upgrade: swap in Yjs for real-time multi-cursor.
 
 ### C. Fundamentals cleanup

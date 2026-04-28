@@ -26,10 +26,13 @@ router.get("/:assignmentId", requireAuth, async (req, res) => {
   res.json({ messages: msgs });
 });
 
+const ALLOWED_TYPES = new Set(["general", "doubt", "revision_request"]);
+
 router.post("/send", requireAuth, async (req, res) => {
   if (req.userRole === "admin") return res.status(400).json({ error: "Admins use /api/admin/messages/send" });
-  const { assignmentId, message } = req.body;
+  const { assignmentId, message, messageType } = req.body;
   if (!assignmentId || !message) return res.status(400).json({ error: "Missing fields" });
+  const type = ALLOWED_TYPES.has(messageType) ? messageType : "general";
 
   const r = await prisma.assignmentRequest.findUnique({ where: { id: assignmentId } });
   if (!r) return res.status(404).json({ error: "Not found" });
@@ -44,11 +47,13 @@ router.post("/send", requireAuth, async (req, res) => {
   const target = admins[0].id;
   const saved = await prisma.adminMessage.create({
     data: {
-      assignmentId, fromAdmin: false, toUserId: target, fromUserId: req.userId, message,
+      assignmentId, fromAdmin: false, toUserId: target, fromUserId: req.userId,
+      message, messageType: type,
     },
   });
+  const titleByType = { doubt: `Doubt from ${req.userRole}`, revision_request: `Revision requested by ${req.userRole}`, general: `Message from ${req.userRole}` };
   for (const a of admins) await notifyUser(a.id, {
-    title: `Message from ${req.userRole}`,
+    title: titleByType[type],
     message: message.slice(0, 120) + (scan.flagged ? " — contact flag" : ""),
     type: "system", referenceId: assignmentId, referenceType: "assignment",
   });

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole, requireApprovedDoer } from "../middleware/auth.js";
-import { scanMany } from "../lib/scanner.js";
+import { scanMany, scanText } from "../lib/scanner.js";
 import { audit } from "../lib/audit.js";
 import { getSetting } from "../lib/payments.js";
 import { notifyUser } from "../lib/notify.js";
@@ -217,6 +217,95 @@ router.post("/:id/deliver", requireAuth, requireApprovedDoer, async (req, res, n
       type: "assignment_update", referenceId: r.id, referenceType: "assignment",
     });
     res.status(201).json({ delivery: { id: d.id, version } });
+  } catch (e) { next(e); }
+});
+
+// -------- Progress updates (doer → all parties) --------
+
+router.post("/:id/progress-update", requireAuth, requireApprovedDoer, async (req, res, next) => {
+  try {
+    const { percentComplete, note } = req.body;
+    const pct = Number(percentComplete);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      return res.status(400).json({ error: "percentComplete must be 0–100" });
+    }
+    const r = await prisma.assignmentRequest.findUnique({ where: { id: req.params.id } });
+    if (!r || r.assignedDoerId !== req.userId) return res.status(404).json({ error: "Not your task" });
+    if (!["assigned", "in_progress", "review", "revision"].includes(r.status)) {
+      return res.status(409).json({ error: `Cannot update progress in status ${r.status}` });
+    }
+
+    const scan = scanText(note || "");
+    const upd = await prisma.progressUpdate.create({
+      data: {
+        assignmentId: r.id, doerId: req.userId,
+        percentComplete: Math.round(pct),
+        note: note ? String(note).slice(0, 1000) : null,
+      },
+    });
+    await audit({ actorId: req.userId, entity: "assignment", entityId: r.id, action: "progress_update", metadata: { pct, scan } });
+
+    await notifyUser(r.clientId, {
+      title: "Progress update", message: `${pct}% — ${r.title}`,
+      type: "assignment_update", referenceId: r.id, referenceType: "assignment",
+    });
+    res.status(201).json({ progressUpdate: upd, flagged: scan.flagged });
+  } catch (e) { next(e); }
+});
+
+router.get("/:id/progress", requireAuth, async (req, res, next) => {
+  try {
+    const r = await prisma.assignmentRequest.findUnique({ where: { id: req.params.id } });
+    if (!r) return res.status(404).json({ error: "Not found" });
+    const allowed = (req.userRole === "client" && r.clientId === req.userId) ||
+      (req.userRole === "doer" && r.assignedDoerId === req.userId) ||
+      req.userRole === "admin";
+    if (!allowed) return res.status(403).json({ error: "Forbidden" });
+
+    const updates = await prisma.progressUpdate.findMany({
+      where: { assignmentId: r.id },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, percentComplete: true, note: true, createdAt: true },
+    });
+    res.json({ progress: updates });
+  } catch (e) { next(e); }
+});
+
+// -------- Client: lighter revision request (before full dispute) --------
+
+router.post("/my-requests/:id/request-revision", requireAuth, requireRole("client"), async (req, res, next) => {
+  try {
+    const r = await prisma.assignmentRequest.findUnique({ where: { id: req.params.id } });
+    if (!r || r.clientId !== req.userId) return res.status(404).json({ error: "Not found" });
+    if (!["delivered", "review"].includes(r.status)) {
+      return res.status(409).json({ error: "Revision can only be requested on a delivered/review assignment" });
+    }
+    const reason = String(req.body.reason || "").slice(0, 2000);
+    if (!reason) return res.status(400).json({ error: "Reason required" });
+
+    const admins = await prisma.user.findMany({ where: { role: "admin", isActive: true }, select: { id: true } });
+    if (admins.length === 0) return res.status(500).json({ error: "No admin to route to" });
+
+    const scan = scanText(reason);
+    await prisma.$transaction([
+      prisma.adminMessage.create({
+        data: {
+          assignmentId: r.id, fromAdmin: false,
+          toUserId: admins[0].id, fromUserId: req.userId,
+          message: reason, messageType: "revision_request",
+        },
+      }),
+      prisma.assignmentRequest.update({
+        where: { id: r.id },
+        data: { revisionRequestCount: { increment: 1 } },
+      }),
+    ]);
+    await audit({ actorId: req.userId, entity: "assignment", entityId: r.id, action: "request_revision", metadata: { scan } });
+    for (const a of admins) await notifyUser(a.id, {
+      title: "Revision requested", message: `${r.title} — ${reason.slice(0, 100)}`,
+      type: "assignment_update", referenceId: r.id, referenceType: "assignment",
+    });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

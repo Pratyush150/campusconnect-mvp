@@ -1,4 +1,4 @@
-# AssignMentor
+# CampusConnect
 
 > A two-channel revenue platform built around one ruthless idea: **make it architecturally impossible for the people transacting to cut the platform out.**
 
@@ -6,7 +6,7 @@
 
 ## Why this exists (the 60-second version)
 
-Every marketplace that connects two humans loses money the same way: the buyer and the seller exchange phone numbers and finish the job off-platform. Fiverr, Urban Company, Chegg, every student-tutor site — they all fight this. Most of them fight it with policies and detection. **AssignMentor fights it by never letting the two humans talk to each other in the first place.**
+Every marketplace that connects two humans loses money the same way: the buyer and the seller exchange phone numbers and finish the job off-platform. Fiverr, Urban Company, Chegg, every student-tutor site — they all fight this. Most of them fight it with policies and detection. **CampusConnect fights it by never letting the two humans talk to each other in the first place.**
 
 Two revenue streams live on the platform:
 
@@ -107,7 +107,7 @@ Stack choices, with the reason for each:
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Backend | Node 20 + Express 5 | Fast to iterate; massive ecosystem; the AssignMentor spec explicitly allows Express-or-Next.js |
+| Backend | Node 20 + Express 5 | Fast to iterate; massive ecosystem; the CampusConnect spec explicitly allows Express-or-Next.js |
 | ORM | Prisma | Type-safe queries, great migrations, one-line DB swap |
 | DB | SQLite → Postgres | SQLite = zero-install local dev; flip `provider = "postgresql"` when you're ready |
 | Auth | JWT in httpOnly cookie | Can't be read by XSS; sent automatically; no Authorization header dance |
@@ -162,7 +162,7 @@ npm install
 cp .env.example .env            # edit JWT_SECRET if you plan to share the URL
 npx prisma migrate dev --name init
 npm run seed                    # creates admin + 2 clients + 2 approved doers + 1 approved mentor
-npm start                       # 🚀 AssignMentor API on http://localhost:4000
+npm start                       # 🚀 CampusConnect API on http://localhost:4000
 ```
 
 ### Terminal 2 — frontend
@@ -179,7 +179,7 @@ Open **http://localhost:5173** in your browser. If you had a stale cookie from a
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Admin | `admin@assignmentor.local` | `admin123` |
+| Admin | `admin@campusconnect.local` | `admin123` |
 | Client | `client@demo.local` | `client123` |
 | Client | `client2@demo.local` | `client123` |
 | Doer (approved) | `doer@demo.local` | `doer123` |
@@ -195,7 +195,7 @@ The login page has **4 role tabs** at the top — tap one and it pre-fills the d
 Open three browser windows/profiles so you can play all three roles at once. Or cycle through one window — your call.
 
 1. **Client window.** Log in as `client@demo.local`. Click **+ Post**. Fill in a title like *"1500-word essay on game theory"*, pick a deadline ≥ 24 hours away, submit. You're now in `pending` state.
-2. **Admin window.** Log in as `admin@assignmentor.local`. Go to **Assignments**, find the new one, open it. Click **Publish (anonymized)**. Status → `published`.
+2. **Admin window.** Log in as `admin@campusconnect.local`. Go to **Assignments**, find the new one, open it. Click **Publish (anonymized)**. Status → `published`.
 3. **Doer window.** Log in as `doer@demo.local`. Go to **Available assignments** — you'll see the listing, but zoom in: **no client name, no email, no phone.** Click in, place a bid with a cover note and a price, submit.
 4. **Admin window.** Refresh the assignment. You'll see the bid with the doer's rating and completed-count. Click **Assign to this doer** (enter final price). Other bids, if any, auto-reject.
 5. **Client window.** Refresh. A "Pay ₹N (mock)" button appears. Click it — this calls `createOrder` then `mock-capture`, flipping the payment to `captured` and the assignment to `in_progress`.
@@ -212,7 +212,7 @@ Want to test the contact scanner? Put `reach me on whatsapp +919876543210` in an
 ## The repo layout
 
 ```
-assignmentor/
+campusconnect/
 ├── PLAN.md                     # Master plan — pitch, invariants, sprint map
 ├── plans/
 │   ├── phase-1.md              # Sprint 1: Foundation (shipped)

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth, dashboardPath } from "./auth.jsx";
 import { useTheme } from "./theme.jsx";
 
 import Login from "./pages/Login.jsx";
+import RegisterChooser from "./pages/RegisterChooser.jsx";
 import RegisterClient from "./pages/RegisterClient.jsx";
 import RegisterDoer from "./pages/RegisterDoer.jsx";
 import RegisterMentor from "./pages/RegisterMentor.jsx";
@@ -46,14 +47,14 @@ function Nav() {
   if (!user) {
     return (
       <div className="nav">
-        <strong>AssignMentor</strong>
+        <strong>CampusConnect</strong>
         <div style={{ marginLeft: "auto" }}><ThemeToggle /></div>
       </div>
     );
   }
   return (
     <div className="nav">
-      <strong>AssignMentor</strong>
+      <strong>CampusConnect</strong>
       {user.role === "client" && <>
         <NavLink to="/client" className={cls}>My assignments</NavLink>
         <NavLink to="/client/new" className={cls}>+ Post</NavLink>
@@ -99,6 +100,7 @@ export default function App() {
       <Nav />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<RegisterChooser />} />
         <Route path="/register/client" element={<RegisterClient />} />
         <Route path="/register/doer" element={<RegisterDoer />} />
         <Route path="/register/mentor" element={<RegisterMentor />} />

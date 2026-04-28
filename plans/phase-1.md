@@ -22,7 +22,7 @@
 
 ## Seed
 
-- Admin: `admin@assignmentor.local / admin123`
+- Admin: `admin@campusconnect.local / admin123`
 - Two clients, two approved doers, one approved mentor
 - Platform settings: `assignment_commission_percent=25`, `mentor_commission_percent=15`, `min_bid_amount=200`, `escrow_hold_days=3`, `max_revision_count=3`, `mentor_cancellation_window_hours=4`
 

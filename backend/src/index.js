@@ -42,7 +42,7 @@ app.use(cookieParser());
 app.use(loadUser);
 
 app.use("/uploads", express.static(path.resolve("uploads")));
-app.get("/", (_req, res) => res.json({ ok: true, service: "assignmentor-backend" }));
+app.get("/", (_req, res) => res.json({ ok: true, service: "campusconnect-backend" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/assignments", assignmentRoutes);
@@ -82,4 +82,4 @@ io.on("connection", (socket) => {
 
 const PORT = Number(process.env.PORT) || 4000;
 const scheme = useHttps ? "https" : "http";
-server.listen(PORT, () => console.log(`🚀 AssignMentor API on ${scheme}://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`🚀 CampusConnect API on ${scheme}://localhost:${PORT}`));

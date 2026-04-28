@@ -1,6 +1,6 @@
-# AssignMentor — Master Plan
+# CampusConnect — Master Plan
 
-> **Pivot note (2026-04-21):** This repo was originally "CampusConnect" (peer-to-peer, consent-gated chat for students). It has been fully rewritten as **AssignMentor** — a two-channel revenue platform. All peer-to-peer code (feed, services, connections, conversations, blocks, ratings, suggestions, chat) has been deleted.
+> **Naming note:** This repo runs under the brand **CampusConnect**. (Earlier iterations were called "AssignMentor"; that name has been retired in favor of CampusConnect across all user-facing surfaces. The two-channel marketplace + mentorship architecture is unchanged.)
 
 ## One-line pitch
 

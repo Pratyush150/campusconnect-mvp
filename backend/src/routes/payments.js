@@ -144,7 +144,7 @@ async function capturePaymentByOrder(orderId, { paymentId, signature }, actorId)
             where: { id: p.referenceId },
             data: {
               status: "confirmed",
-              meetingLink: `https://meet.jit.si/assignmentor-${p.referenceId}-${crypto.randomBytes(4).toString("hex")}`,
+              meetingLink: `https://meet.jit.si/campusconnect-${p.referenceId}-${crypto.randomBytes(4).toString("hex")}`,
               expiresAt: null,
             },
           }),

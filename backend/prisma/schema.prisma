@@ -27,6 +27,7 @@ model User {
   assignedTasks          AssignmentRequest[] @relation("AssignedDoer")
   bids                   AssignmentBid[]
   deliveries             AssignmentDelivery[]
+  progressUpdates        ProgressUpdate[]    @relation("DoerProgress")
 
   adminMessagesTo        AdminMessage[]      @relation("ToUser")
   adminMessagesFrom      AdminMessage[]      @relation("FromUser")
@@ -119,16 +120,31 @@ model AssignmentRequest {
   clientPaid     Boolean   @default(false)
   doerPaidOut    Boolean   @default(false)
   revisionCount  Int       @default(0)
+  revisionRequestCount Int @default(0)
   contactFlagged Boolean   @default(false)
   contactFlags   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  bids       AssignmentBid[]
-  deliveries AssignmentDelivery[]
-  messages   AdminMessage[]
-  payments   Payment[]
-  audits     AuditLog[]
+  bids            AssignmentBid[]
+  deliveries      AssignmentDelivery[]
+  messages        AdminMessage[]
+  payments        Payment[]
+  audits          AuditLog[]
+  progressUpdates ProgressUpdate[]
+}
+
+model ProgressUpdate {
+  id              String   @id @default(cuid())
+  assignmentId    String
+  assignment      AssignmentRequest @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  doerId          String
+  doer            User     @relation("DoerProgress", fields: [doerId], references: [id])
+  percentComplete Int
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@index([assignmentId, createdAt])
 }
 
 model AssignmentBid {
@@ -172,6 +188,7 @@ model AdminMessage {
   fromUserId   String?
   fromUser     User?    @relation("FromUser", fields: [fromUserId], references: [id])
   message      String
+  messageType  String   @default("general")
   attachments  String?
   isRead       Boolean  @default(false)
   createdAt    DateTime @default(now())

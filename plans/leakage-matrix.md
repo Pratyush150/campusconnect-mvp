@@ -1,6 +1,6 @@
 # Revenue-leakage matrix
 
-From AssignMentor spec §6.2. Each row maps to test cases the code must handle.
+From CampusConnect spec §6.2. Each row maps to test cases the code must handle.
 
 | ID  | Scenario                                                                        | Defense implemented                                                                                  |
 | --- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |

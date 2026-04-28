@@ -28,7 +28,7 @@ async function main() {
     });
   }
 
-  const admin = await upsertUser({ email: "admin@assignmentor.local", password: "admin123", role: "admin", fullName: "Platform Admin" });
+  const admin = await upsertUser({ email: "admin@campusconnect.local", password: "admin123", role: "admin", fullName: "Platform Admin" });
   const client = await upsertUser({ email: "client@demo.local", password: "client123", role: "client", fullName: "Demo Client" });
   const client2 = await upsertUser({ email: "client2@demo.local", password: "client123", role: "client", fullName: "Riya Client" });
   const doer = await upsertUser({ email: "doer@demo.local", password: "doer123", role: "doer", fullName: "Demo Doer" });
@@ -85,7 +85,7 @@ async function main() {
   }
 
   console.log("Seeded:");
-  console.log("  admin    admin@assignmentor.local / admin123");
+  console.log("  admin    admin@campusconnect.local / admin123");
   console.log("  client   client@demo.local        / client123");
   console.log("  client2  client2@demo.local       / client123");
   console.log("  doer     doer@demo.local          / doer123   (approved)");
