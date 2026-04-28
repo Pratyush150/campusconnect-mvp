@@ -910,17 +910,31 @@ button.xs { padding: 4px 8px; font-size: 11.5px; border-radius: 6px; }
 .landing-faq-item {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px; padding: 18px 22px;
-  text-align: left; cursor: pointer;
-  color: white; font: inherit;
+  border-radius: 12px;
+  color: white;
   transition: all 0.15s;
-  width: 100%; display: block;
+  overflow: hidden;
 }
 .landing-faq-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.16); }
 .landing-faq-item.open { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.4); }
-.landing-faq-q { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 15px; font-weight: 500; }
-.landing-faq-chev { font-size: 22px; color: rgba(241,245,249,0.5); flex-shrink: 0; }
-.landing-faq-a { margin-top: 12px; color: rgba(241,245,249,0.7); font-size: 14px; line-height: 1.6; }
+.landing-faq-q {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; padding: 18px 22px;
+  background: transparent; border: 0; color: inherit;
+  text-align: left; cursor: pointer; font: inherit;
+  font-size: 15px; font-weight: 500;
+}
+.landing-faq-q:hover { background: transparent; }
+.landing-faq-q-text {
+  flex: 1; min-width: 0;
+  white-space: normal; overflow-wrap: break-word; word-wrap: break-word;
+}
+.landing-faq-chev { font-size: 22px; color: rgba(241,245,249,0.5); flex-shrink: 0; line-height: 1; }
+.landing-faq-a {
+  padding: 0 22px 18px;
+  color: rgba(241,245,249,0.7); font-size: 14px; line-height: 1.6;
+  white-space: normal; overflow-wrap: break-word; word-wrap: break-word;
+}
 
 .landing-cta {
   position: relative; padding: 60px 24px;

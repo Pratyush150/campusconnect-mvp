@@ -208,18 +208,18 @@ export default function Home() {
         </div>
         <div className="landing-faq">
           {FAQ.map((f, i) => (
-            <button
-              key={i}
-              type="button"
-              className={"landing-faq-item " + (openFaq === i ? "open" : "")}
-              onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
-            >
-              <div className="landing-faq-q">
-                <span>{f.q}</span>
-                <span className="landing-faq-chev">{openFaq === i ? "−" : "+"}</span>
-              </div>
+            <div key={i} className={"landing-faq-item " + (openFaq === i ? "open" : "")}>
+              <button
+                type="button"
+                className="landing-faq-q"
+                onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
+                aria-expanded={openFaq === i}
+              >
+                <span className="landing-faq-q-text">{f.q}</span>
+                <span className="landing-faq-chev" aria-hidden="true">{openFaq === i ? "−" : "+"}</span>
+              </button>
               {openFaq === i && <div className="landing-faq-a">{f.a}</div>}
-            </button>
+            </div>
           ))}
         </div>
       </section>
