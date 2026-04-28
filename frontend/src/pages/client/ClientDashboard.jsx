@@ -62,9 +62,10 @@ export default function ClientDashboard() {
         return (
           <Link key={a.id} to={`/client/assignments/${a.id}`} style={{ color: "inherit", textDecoration: "none" }}>
             <div className="card">
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                 <span className={`tag ${a.status}`}>{a.status}</span>
                 {a.contactFlagged && <span className="tag flag">contact-flag</span>}
+                {a.isHandwritten && <span className="tag revision">✍️ handwritten</span>}
                 {a.revisionRequestCount > 0 && <span className="tag revision">{a.revisionRequestCount}× revision</span>}
               </div>
               <h3 style={{ marginBottom: 2 }}>{a.title}</h3>

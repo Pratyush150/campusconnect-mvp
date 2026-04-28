@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireApprovedMentor } from "../middleware/auth.js";
 import { audit } from "../lib/audit.js";
 import { getSetting } from "../lib/payments.js";
+import { notifyUser } from "../lib/notify.js";
 
 const router = Router();
 
@@ -89,6 +90,11 @@ router.delete("/bookings/:id/cancel", requireAuth, async (req, res, next) => {
       prisma.mentorSlot.update({ where: { id: b.slotId }, data: { isBooked: false } }),
     ]);
     await audit({ actorId: req.userId, entity: "booking", entityId: b.id, action: "cancel", metadata: { freeCancellation } });
+    await notifyUser(b.mentorId, {
+      title: "Session cancelled",
+      message: `Your ${b.slot.slotDate} ${b.slot.startTime} booking was cancelled by the student.`,
+      type: "mentor_booking", referenceId: b.id, referenceType: "booking",
+    });
     res.json({ ok: true, freeCancellation });
   } catch (e) { next(e); }
 });
@@ -231,6 +237,11 @@ router.put("/bookings/:id/complete", requireAuth, requireApprovedMentor, async (
     });
     await prisma.payment.update({ where: { id: payment.id }, data: { status: "released" } });
   }
+  await notifyUser(b.studentId, {
+    title: "Session marked complete",
+    message: "Leave a review when you have a moment.",
+    type: "mentor_booking", referenceId: b.id, referenceType: "booking",
+  });
   res.json({ ok: true });
 });
 

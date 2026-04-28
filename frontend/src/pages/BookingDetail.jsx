@@ -2,18 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../auth.jsx";
-import { useToast, useConfirm, usePrompt } from "../toast.jsx";
+import { useToast, useConfirm } from "../toast.jsx";
+import ReviewForm from "../components/ReviewForm.jsx";
+import ReviewBlock from "../components/ReviewBlock.jsx";
 
 export default function BookingDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const prompt = usePrompt();
   const [b, setB] = useState(null);
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState("idle");
+  const [myReviews, setMyReviews] = useState([]);
   const saveTimer = useRef(null);
 
   const load = () =>
@@ -25,6 +27,9 @@ export default function BookingDetail() {
       .catch((e) => setErr(e.response?.data?.error || "Failed"));
 
   useEffect(() => { load(); }, [id]);
+  useEffect(() => { api.get("/reviews/mine").then((r) => setMyReviews(r.data.reviews)).catch(() => {}); }, []);
+
+  const alreadyReviewed = myReviews.some((r) => r.type === "mentor_session" && r.referenceId === id);
 
   useEffect(() => {
     if (!b || b.mentorId !== user?.id) return;
@@ -58,19 +63,6 @@ export default function BookingDetail() {
     try {
       await api.put(`/mentors/bookings/${id}/complete`);
       toast.success("Session marked complete. Payout queued.");
-      load();
-    } catch (e) { toast.error(e.response?.data?.error || "Failed"); }
-  };
-
-  const rate = async () => {
-    const starsStr = await prompt({ title: "Rate this session", label: "Stars (1–5)", placeholder: "5", confirmLabel: "Next" });
-    const stars = Number(starsStr);
-    if (!(stars >= 1 && stars <= 5)) return toast.error("Rating must be 1–5");
-    const feedback = await prompt({ title: "Any feedback?", label: "Optional", multiline: true, confirmLabel: "Submit rating" });
-    if (feedback === null) return;
-    try {
-      await api.post(`/mentors/bookings/${id}/rate`, { rating: stars, feedback });
-      toast.success("Thanks — your rating was saved.");
       load();
     } catch (e) { toast.error(e.response?.data?.error || "Failed"); }
   };
@@ -118,11 +110,22 @@ export default function BookingDetail() {
 
         <div style={{ marginTop: 14 }} className="hstack">
           {isMentor && b.status === "confirmed" && <button onClick={complete}>Mark complete</button>}
-          {isStudent && b.status === "completed" && !b.rating && <button onClick={rate}>Rate this session</button>}
-          {isStudent && ["confirmed", "pending_payment"].includes(b.status) && <button className="danger sm" onClick={cancel}>Cancel booking</button>}
+          {isStudent && ["confirmed", "pending_payment"].includes(b.status) && <button className="destructive sm" onClick={cancel}>Cancel booking</button>}
         </div>
-        {b.rating && <div className="ok" style={{ marginTop: 8 }}>You rated this session {b.rating}/5 ⭐</div>}
       </div>
+
+      {isStudent && ["confirmed", "completed"].includes(b.status) && !alreadyReviewed && (
+        <ReviewForm
+          type="mentor_session"
+          referenceId={id}
+          label={`Review your session with ${b.mentor.fullName}`}
+          onSubmitted={() => {
+            api.get("/reviews/mine").then((r) => setMyReviews(r.data.reviews)).catch(() => {});
+            load();
+          }}
+        />
+      )}
+      {isStudent && alreadyReviewed && <div className="card muted">✓ You've already reviewed this session.</div>}
 
       <div className="notes-pane">
         <div className="hstack" style={{ justifyContent: "space-between" }}>

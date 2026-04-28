@@ -16,6 +16,9 @@ backend/prisma/dev.db*
 
 # build outputs
 frontend/dist/
+
+# user uploads (dev only)
+backend/uploads/
 **/.vite/
 **/*.tsbuildinfo
 

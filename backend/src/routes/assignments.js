@@ -12,8 +12,13 @@ const router = Router();
 
 router.post("/request", requireAuth, requireRole("client"), async (req, res, next) => {
   try {
-    const { title, description, subject, assignmentType, deadline, budgetMin, budgetMax, attachments } = req.body;
+    const {
+      title, description, subject, assignmentType, deadline,
+      budgetMin, budgetMax, attachments,
+      isHandwritten, handwrittenExtra,
+    } = req.body;
     if (!title || !description || !deadline) return res.status(400).json({ error: "Missing fields" });
+    if (!budgetMax) return res.status(400).json({ error: "Maximum budget is required" });
     const dl = new Date(deadline);
     if (isNaN(dl) || dl < new Date(Date.now() + 24 * 60 * 60 * 1000)) {
       return res.status(400).json({ error: "Deadline must be at least 24h in the future" });
@@ -29,8 +34,10 @@ router.post("/request", requireAuth, requireRole("client"), async (req, res, nex
         assignmentType: assignmentType || null,
         deadline: dl,
         budgetMin: budgetMin ? Number(budgetMin) : null,
-        budgetMax: budgetMax ? Number(budgetMax) : null,
+        budgetMax: Number(budgetMax),
         attachments: attachments ? JSON.stringify(attachments) : null,
+        isHandwritten: Boolean(isHandwritten),
+        handwrittenExtra: isHandwritten && handwrittenExtra ? Number(handwrittenExtra) : null,
         status: "pending",
         contactFlagged: scan.flagged,
         contactFlags: scan.flagged ? scan.hits.join(",") : null,
@@ -71,12 +78,37 @@ router.get("/my-requests/:id", requireAuth, requireRole("client"), async (req, r
   res.json({ assignment: view });
 });
 
-router.post("/my-requests/:id/confirm", requireAuth, requireRole("client"), async (req, res, next) => {
+// Lightweight: client acknowledges they received the files (no payment, no state move).
+router.post("/my-requests/:id/mark-received", requireAuth, requireRole("client"), async (req, res, next) => {
   try {
     const r = await prisma.assignmentRequest.findUnique({ where: { id: req.params.id } });
     if (!r || r.clientId !== req.userId) return res.status(404).json({ error: "Not found" });
+    if (r.status !== "delivered") return res.status(409).json({ error: `Cannot mark received in status ${r.status}` });
+    if (r.clientAcknowledgedAt) return res.json({ ok: true, alreadyAcknowledged: true });
+    await prisma.assignmentRequest.update({ where: { id: r.id }, data: { clientAcknowledgedAt: new Date() } });
+    await audit({ actorId: req.userId, entity: "assignment", entityId: r.id, action: "mark_received" });
+    if (r.assignedDoerId) {
+      await notifyUser(r.assignedDoerId, {
+        title: "Client acknowledged delivery", message: r.title,
+        type: "assignment_update", referenceId: r.id, referenceType: "assignment",
+      });
+    }
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// Legacy single-payment path: still works for assignments that weren't split (defensive).
+router.post("/my-requests/:id/confirm", requireAuth, requireRole("client"), async (req, res, next) => {
+  try {
+    const r = await prisma.assignmentRequest.findUnique({ where: { id: req.params.id }, include: { payments: true } });
+    if (!r || r.clientId !== req.userId) return res.status(404).json({ error: "Not found" });
     if (r.status !== "delivered") return res.status(409).json({ error: `Cannot confirm in status ${r.status}` });
-    await releaseEscrow(r.id, req.userId, "client_confirmed");
+    const captured = r.payments.filter((p) => p.status === "captured" && p.paymentType === "assignment_escrow");
+    const hasFinal = captured.some((p) => p.installment === "final");
+    const hasInitial = captured.some((p) => p.installment === "initial");
+    // If the client paid in two installments and final isn't captured yet, refuse.
+    if (hasInitial && !hasFinal) return res.status(409).json({ error: "Final 70% payment required before completion" });
+    await releaseEscrowFull(r.id, req.userId, "client_confirmed");
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -324,26 +356,30 @@ function doerView(r) {
 
 function safeJson(s, fallback) { try { return JSON.parse(s); } catch { return fallback; } }
 
-// shared with admin routes
-export async function releaseEscrow(assignmentId, actorId, reason) {
+// Sums all captured assignment_escrow payments (initial + final), takes the
+// platform commission, releases the doer's share, and moves the assignment to completed.
+export async function releaseEscrowFull(assignmentId, actorId, reason) {
   const r = await prisma.assignmentRequest.findUnique({
     where: { id: assignmentId },
     include: { payments: true },
   });
   if (!r || !["delivered", "completed"].includes(r.status)) return;
   if (r.status === "completed") return;
-  const capturedPayment = r.payments.find((p) => p.status === "captured" && p.paymentType === "assignment_escrow");
-  if (!capturedPayment) return;
+  const capturedPayments = r.payments.filter((p) => p.status === "captured" && p.paymentType === "assignment_escrow");
+  if (capturedPayments.length === 0) return;
 
   const pct = Number((await getSetting("assignment_commission_percent", 25)));
-  const gross = r.finalPrice || capturedPayment.amount;
+  const gross = capturedPayments.reduce((acc, p) => acc + p.amount, 0);
   const platformFee = Math.round(gross * pct / 100);
   const providerPayout = gross - platformFee;
+
+  // Attach the platform earning to the most recent captured payment (final, if it exists).
+  const anchorPayment = capturedPayments.find((p) => p.installment === "final") || capturedPayments[capturedPayments.length - 1];
 
   await prisma.$transaction([
     prisma.platformEarning.create({
       data: {
-        paymentId: capturedPayment.id,
+        paymentId: anchorPayment.id,
         grossAmount: gross,
         platformFee,
         providerPayout,
@@ -352,16 +388,30 @@ export async function releaseEscrow(assignmentId, actorId, reason) {
         status: "pending",
       },
     }),
-    prisma.payment.update({ where: { id: capturedPayment.id }, data: { status: "released" } }),
+    prisma.payment.updateMany({
+      where: { id: { in: capturedPayments.map((p) => p.id) } },
+      data: { status: "released" },
+    }),
     prisma.assignmentRequest.update({ where: { id: r.id }, data: { status: "completed" } }),
   ]);
 
-  await audit({ actorId, entity: "assignment", entityId: r.id, action: "release_escrow", previousState: "delivered", newState: "completed", metadata: { reason, platformFee, providerPayout } });
-  await notifyUser(r.assignedDoerId, {
-    title: "Payment released", message: `₹${providerPayout} added to your payouts`,
-    type: "payment", referenceId: r.id, referenceType: "assignment",
-  });
+  await audit({ actorId, entity: "assignment", entityId: r.id, action: "release_escrow", previousState: "delivered", newState: "completed", metadata: { reason, gross, platformFee, providerPayout } });
+  if (r.assignedDoerId) {
+    await notifyUser(r.assignedDoerId, {
+      title: "Payment released", message: `₹${providerPayout} added to your payouts`,
+      type: "payment", referenceId: r.id, referenceType: "assignment",
+    });
+  }
+  if (r.clientId) {
+    await notifyUser(r.clientId, {
+      title: "Assignment completed", message: r.title,
+      type: "assignment_update", referenceId: r.id, referenceType: "assignment",
+    });
+  }
 }
+
+// Backward-compat alias.
+export const releaseEscrow = releaseEscrowFull;
 
 export { doerView, clientView, safeJson };
 export default router;

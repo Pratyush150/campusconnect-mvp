@@ -29,6 +29,9 @@ model User {
   deliveries             AssignmentDelivery[]
   progressUpdates        ProgressUpdate[]    @relation("DoerProgress")
 
+  reviewsWritten         Review[]            @relation("Rater")
+  reviewsReceived        Review[]            @relation("Ratee")
+
   adminMessagesTo        AdminMessage[]      @relation("ToUser")
   adminMessagesFrom      AdminMessage[]      @relation("FromUser")
 
@@ -123,6 +126,9 @@ model AssignmentRequest {
   revisionRequestCount Int @default(0)
   contactFlagged Boolean   @default(false)
   contactFlags   String?
+  isHandwritten  Boolean   @default(false)
+  handwrittenExtra Int?
+  clientAcknowledgedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -262,6 +268,7 @@ model Payment {
   amount            Int
   currency          String   @default("INR")
   paymentType       String
+  installment       String   @default("single")
   referenceId       String?
   referenceType     String?
   assignmentId      String?
@@ -335,6 +342,22 @@ model Notification {
   createdAt     DateTime  @default(now())
 
   @@index([userId, createdAt])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  raterId      String
+  rater        User     @relation("Rater", fields: [raterId], references: [id])
+  rateeId      String
+  ratee        User     @relation("Ratee", fields: [rateeId], references: [id])
+  rating       Int
+  text         String?
+  type         String   // "assignment" | "mentor_session"
+  referenceId  String   // assignmentId or bookingId
+  createdAt    DateTime @default(now())
+
+  @@unique([raterId, type, referenceId])
+  @@index([rateeId, createdAt])
 }
 
 model AuditLog {

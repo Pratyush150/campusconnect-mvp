@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate, NavLink, useNavigate, Link } from "react-router-dom";
 import { AuthProvider, useAuth, dashboardPath } from "./auth.jsx";
 import { useTheme } from "./theme.jsx";
+import NotificationBell from "./components/NotificationBell.jsx";
 
+import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 import RegisterChooser from "./pages/RegisterChooser.jsx";
 import RegisterClient from "./pages/RegisterClient.jsx";
@@ -44,14 +46,7 @@ function Nav() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const cls = ({ isActive }) => (isActive ? "active" : "");
-  if (!user) {
-    return (
-      <div className="nav">
-        <strong>CampusConnect</strong>
-        <div style={{ marginLeft: "auto" }}><ThemeToggle /></div>
-      </div>
-    );
-  }
+  if (!user) return null;
   return (
     <div className="nav">
       <strong>CampusConnect</strong>
@@ -78,6 +73,7 @@ function Nav() {
         <NavLink to="/admin/settings" className={cls}>Settings</NavLink>
       </>}
       <div style={{ marginLeft: "auto" }} className="hstack">
+        <NotificationBell />
         <span className="muted" style={{ fontSize: 12 }}>{user.fullName} · {user.role}</span>
         <ThemeToggle />
         <button className="secondary sm" onClick={async () => { await logout(); nav("/login"); }}>Log out</button>
@@ -128,14 +124,15 @@ export default function App() {
         <Route path="/admin/payouts" element={<RequireRole roles={["admin"]}><AdminPayouts /></RequireRole>} />
         <Route path="/admin/settings" element={<RequireRole roles={["admin"]}><AdminSettings /></RequireRole>} />
 
-        <Route path="*" element={<Home />} />
+        <Route path="/" element={<Home />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </AuthProvider>
   );
 }
 
-function Home() {
+function NotFound() {
   const { user, loading } = useAuth();
   if (loading) return <div className="center">Loading…</div>;
-  return <Navigate to={user ? dashboardPath(user.role) : "/login"} replace />;
+  return <Navigate to={user ? dashboardPath(user.role) : "/"} replace />;
 }

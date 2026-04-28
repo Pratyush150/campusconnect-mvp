@@ -22,6 +22,7 @@ import mentorRoutes from "./routes/mentors.js";
 import notificationRoutes from "./routes/notifications.js";
 import uploadRoutes from "./routes/uploads.js";
 import payoutRoutes from "./routes/payouts.js";
+import reviewRoutes from "./routes/reviews.js";
 
 dotenv.config();
 
@@ -53,6 +54,7 @@ app.use("/api/mentors", mentorRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/payouts", payoutRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 app.use((err, req, res, _next) => {
   if (err.status) return res.status(err.status).json({ error: err.message });

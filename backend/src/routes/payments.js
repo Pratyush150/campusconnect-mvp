@@ -9,19 +9,48 @@ import { createHoldBooking } from "./mentors.js";
 
 const router = Router();
 
+// Compute initial / final amounts for an assignment, factoring in handwrittenExtra.
+// Initial = 30% of (finalPrice + handwrittenExtra); Final = the remaining 70%.
+export function splitAmounts(r) {
+  const total = (r.finalPrice || 0) + (r.handwrittenExtra || 0);
+  const initial = Math.round(total * 0.30);
+  const final = total - initial;
+  return { total, initial, final };
+}
+
 router.post("/create-order", requireAuth, async (req, res) => {
-  const { assignmentId, bookingId } = req.body;
+  const { assignmentId, bookingId, installmentType } = req.body;
   if (assignmentId) {
-    const r = await prisma.assignmentRequest.findUnique({ where: { id: assignmentId } });
+    const r = await prisma.assignmentRequest.findUnique({
+      where: { id: assignmentId },
+      include: { payments: true },
+    });
     if (!r || r.clientId !== req.userId) return res.status(404).json({ error: "Not found" });
-    if (r.status !== "assigned") return res.status(409).json({ error: "Not awaiting payment" });
     if (!r.finalPrice) return res.status(500).json({ error: "No finalPrice set" });
-    const order = await createOrder({ amount: r.finalPrice, receipt: `asg-${r.id}` });
+
+    const inst = installmentType === "final" ? "final" : "initial";
+    const split = splitAmounts(r);
+
+    if (inst === "initial") {
+      if (r.status !== "assigned") return res.status(409).json({ error: "Initial payment only allowed in 'assigned' state" });
+      const existingInitial = r.payments.find((p) => p.installment === "initial" && p.status !== "pending");
+      if (existingInitial) return res.status(409).json({ error: "Initial already paid" });
+    } else {
+      if (r.status !== "delivered") return res.status(409).json({ error: "Final payment only allowed after delivery" });
+      const initial = r.payments.find((p) => p.installment === "initial" && p.status === "captured");
+      if (!initial) return res.status(409).json({ error: "Pay initial 30% first" });
+      const existingFinal = r.payments.find((p) => p.installment === "final" && p.status !== "pending");
+      if (existingFinal) return res.status(409).json({ error: "Final already paid" });
+    }
+
+    const amount = inst === "initial" ? split.initial : split.final;
+    const order = await createOrder({ amount, receipt: `asg-${r.id}-${inst}` });
     const payment = await prisma.payment.create({
       data: {
         payerId: req.userId,
-        amount: r.finalPrice,
+        amount,
         paymentType: "assignment_escrow",
+        installment: inst,
         referenceId: r.id,
         referenceType: "assignment",
         assignmentId: r.id,
@@ -29,7 +58,7 @@ router.post("/create-order", requireAuth, async (req, res) => {
         status: "pending",
       },
     });
-    return res.json({ order, paymentId: payment.id });
+    return res.json({ order, paymentId: payment.id, installment: inst, split });
   }
   if (bookingId) {
     const b = await prisma.mentorBooking.findUnique({ where: { id: bookingId }, include: { mentor: { include: { mentorProfile: true } } } });
@@ -125,12 +154,17 @@ async function capturePaymentByOrder(orderId, { paymentId, signature }, actorId)
   const p = await prisma.payment.findUnique({ where: { orderId } });
   if (!p) return;
   if (p.status === "captured") return;
+
+  // For assignment escrow we may need to release on the FINAL installment.
+  const isAssignmentInitial = p.paymentType === "assignment_escrow" && p.installment !== "final";
+  const isAssignmentFinal   = p.paymentType === "assignment_escrow" && p.installment === "final";
+
   await prisma.$transaction([
     prisma.payment.update({
       where: { id: p.id },
       data: { status: "captured", providerPaymentId: paymentId, providerSignature: signature },
     }),
-    ...(p.paymentType === "assignment_escrow"
+    ...(isAssignmentInitial
       ? [
           prisma.assignmentRequest.update({
             where: { id: p.assignmentId },
@@ -152,12 +186,23 @@ async function capturePaymentByOrder(orderId, { paymentId, signature }, actorId)
       : []),
   ]);
   await audit({ actorId, entity: "payment", entityId: p.id, action: "capture", previousState: "pending", newState: "captured", assignmentId: p.assignmentId });
-  if (p.paymentType === "assignment_escrow") {
+
+  if (isAssignmentInitial) {
     const r = await prisma.assignmentRequest.findUnique({ where: { id: p.assignmentId } });
     if (r?.assignedDoerId) {
-      await notifyUser(r.assignedDoerId, { title: "Payment received", message: `Start work on "${r.title}"`, type: "payment", referenceId: r.id, referenceType: "assignment" });
+      await notifyUser(r.assignedDoerId, { title: "30% received — start work", message: `"${r.title}"`, type: "payment", referenceId: r.id, referenceType: "assignment" });
+    }
+    if (r?.clientId) {
+      await notifyUser(r.clientId, { title: "Initial payment captured", message: `30% paid. Pay the remaining 70% on delivery.`, type: "payment", referenceId: r.id, referenceType: "assignment" });
     }
   }
+
+  if (isAssignmentFinal) {
+    // Final 70% captured → release combined escrow and mark completed.
+    const { releaseEscrowFull } = await import("./assignments.js");
+    await releaseEscrowFull(p.assignmentId, actorId, "client_paid_final");
+  }
+
   if (p.paymentType === "mentor_booking") {
     const b = await prisma.mentorBooking.findUnique({ where: { id: p.referenceId } });
     if (b) {

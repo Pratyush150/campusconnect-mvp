@@ -136,6 +136,10 @@ router.put("/assignments/:id/assign", async (req, res) => {
   if (!r || !bid || bid.assignmentId !== r.id) return res.status(404).json({ error: "Not found" });
   if (!["published", "bidding"].includes(r.status)) return res.status(409).json({ error: "Not matchable" });
 
+  const losingBids = await prisma.assignmentBid.findMany({
+    where: { assignmentId: r.id, id: { not: bid.id }, status: "pending" },
+    select: { id: true, doerId: true },
+  });
   await prisma.$transaction([
     prisma.assignmentBid.update({ where: { id: bid.id }, data: { status: "accepted" } }),
     prisma.assignmentBid.updateMany({
@@ -149,7 +153,10 @@ router.put("/assignments/:id/assign", async (req, res) => {
   ]);
   await audit({ actorId: req.userId, entity: "assignment", entityId: r.id, action: "assign", previousState: r.status, newState: "assigned", metadata: { bidId: bid.id, finalPrice: price } });
   await notifyUser(bid.doerId, { title: "You've been assigned a task", message: `"${r.title}" — ₹${price}`, type: "assignment_update", referenceId: r.id, referenceType: "assignment" });
-  await notifyUser(r.clientId, { title: "Matched with an expert", message: `Please pay ₹${price} to start work.`, type: "assignment_update", referenceId: r.id, referenceType: "assignment" });
+  await notifyUser(r.clientId, { title: "Matched with an expert", message: `Please pay 30% (₹${Math.round(price * 0.3)}) to start work.`, type: "assignment_update", referenceId: r.id, referenceType: "assignment" });
+  for (const lb of losingBids) {
+    await notifyUser(lb.doerId, { title: "Bid not selected", message: `"${r.title}" — admin chose another bid.`, type: "assignment_update", referenceId: r.id, referenceType: "assignment" });
+  }
   res.json({ ok: true });
 });
 
@@ -252,6 +259,7 @@ router.put("/mentors/:id/approve", async (req, res) => {
 
 router.put("/mentors/:id/deactivate", async (req, res) => {
   await prisma.mentorProfile.update({ where: { userId: req.params.id }, data: { isApproved: false } });
+  await notifyUser(req.params.id, { title: "Mentor profile deactivated", message: "Your profile is no longer public. Contact admin if you need it back.", type: "system" });
   res.json({ ok: true });
 });
 

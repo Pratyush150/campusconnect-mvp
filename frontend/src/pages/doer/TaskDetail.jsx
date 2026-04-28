@@ -96,19 +96,28 @@ export default function TaskDetail() {
       <Link to="/doer" className="muted">← Back</Link>
 
       <div className="card" style={{ marginTop: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
           <span className={`tag ${t.status}`}>{t.status}</span>
-          {t.clientPaid && <span className="tag completed">paid</span>}
+          {t.clientPaid && <span className="tag completed">30% paid</span>}
+          {t.isHandwritten && <span className="tag revision">✍️ handwritten · ₹{t.handwrittenExtra} extra</span>}
         </div>
         <h2 style={{ marginBottom: 2 }}>{t.title}</h2>
         <Timeline assignment={t} />
         <div className="meta-row">
           <span className="meta-item">📅 Deadline {new Date(t.deadline).toLocaleString()}</span>
           {dl && <span className={`meta-item ${dl.tone || ""}`}>⏰ {dl.label}</span>}
-          <span className="meta-item">💰 ₹{t.finalPrice}</span>
+          <span className="meta-item">💰 ₹{t.finalPrice}{t.handwrittenExtra ? ` + ₹${t.handwrittenExtra}` : ""}</span>
           {latestPct != null && <span className="meta-item">📊 {latestPct}%</span>}
         </div>
         <p style={{ marginTop: 12 }}>{t.description}</p>
+        {t.attachments?.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <strong style={{ fontSize: 13 }}>Client's reference files:</strong>
+            <ul style={{ marginTop: 4, paddingLeft: 18 }}>
+              {t.attachments.map((f, i) => <li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.filename}</a></li>)}
+            </ul>
+          </div>
+        )}
 
         {canPostProgress && (
           <div className="row" style={{ flexWrap: "wrap", marginTop: 12 }}>

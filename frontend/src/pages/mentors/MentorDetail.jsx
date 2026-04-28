@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../../api.js";
 import { useToast, useConfirm } from "../../toast.jsx";
+import ReviewBlock from "../../components/ReviewBlock.jsx";
+import { StarReadout } from "../../components/StarRating.jsx";
 
 function fmtDateLabel(iso) {
   const d = new Date(iso + "T00:00:00");
@@ -83,8 +85,9 @@ export default function MentorDetail() {
           <div>
             <h2 style={{ margin: 0 }}>{mentor.fullName}</h2>
             <div className="muted">{mentor.mentorProfile.headline}</div>
-            <div className="dim">
-              ⭐ {Number(mentor.mentorProfile.rating).toFixed(1)} · {mentor.mentorProfile.totalSessions} sessions · {mentor.mentorProfile.institution}
+            <div style={{ marginTop: 4 }}>
+              <StarReadout value={mentor.mentorProfile.rating} count={mentor.mentorProfile.totalSessions} />
+              <span className="muted" style={{ marginLeft: 8, fontSize: 12.5 }}>· {mentor.mentorProfile.institution}</span>
             </div>
           </div>
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
@@ -159,6 +162,8 @@ export default function MentorDetail() {
           </>
         )}
       </div>
+
+      <ReviewBlock userId={mentor.id} title="Mentor reviews" />
 
       <div className="card" style={{ fontSize: 12 }}>
         <div className="dim">

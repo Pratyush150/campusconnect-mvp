@@ -39,7 +39,10 @@ export default function AvailableDetail() {
     <div className="container" style={{ maxWidth: 720 }}>
       <Link to="/doer" className="muted">← Back</Link>
       <div className="card" style={{ marginTop: 6 }}>
-        <span className={`tag ${a.status}`}>{a.status}</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+          <span className={`tag ${a.status}`}>{a.status}</span>
+          {a.isHandwritten && <span className="tag revision">✍️ handwritten · ₹{a.handwrittenExtra} extra</span>}
+        </div>
         <h2 style={{ marginTop: 4 }}>{a.title}</h2>
         <div className="meta-row">
           <span className="meta-item">{a.subject || "—"}</span>
@@ -49,6 +52,14 @@ export default function AvailableDetail() {
           {(a.budgetMin || a.budgetMax) && <span className="meta-item">💰 ₹{a.budgetMin || "?"}–{a.budgetMax || "?"}</span>}
         </div>
         <p style={{ marginTop: 12 }}>{a.description}</p>
+        {a.attachments?.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <strong style={{ fontSize: 13 }}>Reference files:</strong>
+            <ul style={{ marginTop: 4, paddingLeft: 18 }}>
+              {a.attachments.map((f, i) => <li key={i}><a href={f.url} target="_blank" rel="noreferrer">{f.filename}</a></li>)}
+            </ul>
+          </div>
+        )}
       </div>
 
       {my ? (
