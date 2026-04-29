@@ -74,6 +74,130 @@ router.get("/dashboard", async (_req, res) => {
   });
 });
 
+// ---- Earnings (date-ranged) ----
+function parseRange(req) {
+  const now = new Date();
+  const to = req.query.to ? new Date(String(req.query.to)) : now;
+  const from = req.query.from ? new Date(String(req.query.from)) : new Date(now.getTime() - 30 * 86400 * 1000);
+  if (isNaN(from) || isNaN(to)) return null;
+  // inclusive end of day if user passed YYYY-MM-DD
+  if (String(req.query.to || "").length === 10) to.setHours(23, 59, 59, 999);
+  return { from, to };
+}
+
+function dayKey(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+router.get("/earnings", async (req, res) => {
+  const range = parseRange(req);
+  if (!range) return res.status(400).json({ error: "Invalid date range" });
+  const { from, to } = range;
+  const spanMs = to.getTime() - from.getTime();
+  const prevTo = new Date(from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - spanMs);
+
+  const [earningsInRange, paymentsInRange, prevEarnings, prevPayments] = await Promise.all([
+    prisma.platformEarning.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+      select: { id: true, grossAmount: true, platformFee: true, providerPayout: true, earningType: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.payment.aggregate({
+      where: { status: "captured", createdAt: { gte: from, lte: to } },
+      _sum: { amount: true }, _count: true,
+    }),
+    prisma.platformEarning.aggregate({
+      where: { createdAt: { gte: prevFrom, lte: prevTo } },
+      _sum: { platformFee: true, grossAmount: true },
+    }),
+    prisma.payment.aggregate({
+      where: { status: "captured", createdAt: { gte: prevFrom, lte: prevTo } },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const totals = earningsInRange.reduce((acc, e) => {
+    acc.platformFee += e.platformFee;
+    acc.gross += e.grossAmount;
+    acc.providerPayout += e.providerPayout;
+    const k = e.earningType === "mentor_commission" ? "mentor" : "assignment";
+    acc.bySource[k] = (acc.bySource[k] || 0) + e.platformFee;
+    return acc;
+  }, { platformFee: 0, gross: 0, providerPayout: 0, bySource: {} });
+
+  // daily series — earnings per day, split by source
+  const daily = {};
+  for (const e of earningsInRange) {
+    const k = dayKey(e.createdAt);
+    if (!daily[k]) daily[k] = { date: k, assignment: 0, mentor: 0, total: 0 };
+    const src = e.earningType === "mentor_commission" ? "mentor" : "assignment";
+    daily[k][src] += e.platformFee;
+    daily[k].total += e.platformFee;
+  }
+  // fill empty days so the chart isn't ragged
+  const days = [];
+  const cursor = new Date(from); cursor.setHours(0, 0, 0, 0);
+  const end = new Date(to); end.setHours(0, 0, 0, 0);
+  while (cursor <= end) {
+    const k = dayKey(cursor);
+    days.push(daily[k] || { date: k, assignment: 0, mentor: 0, total: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const cashInflow = paymentsInRange._sum.amount || 0;
+  const prevPlatformFee = prevEarnings._sum.platformFee || 0;
+  const prevCash = prevPayments._sum.amount || 0;
+  const pctChange = (cur, prev) => prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null;
+
+  res.json({
+    range: { from: from.toISOString(), to: to.toISOString() },
+    totals: {
+      cashInflow,
+      platformFee: totals.platformFee,
+      providerPayout: totals.providerPayout,
+      gross: totals.gross,
+      transactionCount: paymentsInRange._count,
+      bySource: { assignment: totals.bySource.assignment || 0, mentor: totals.bySource.mentor || 0 },
+    },
+    deltas: {
+      cashInflow: pctChange(cashInflow, prevCash),
+      platformFee: pctChange(totals.platformFee, prevPlatformFee),
+    },
+    previous: { cashInflow: prevCash, platformFee: prevPlatformFee },
+    daily: days,
+  });
+});
+
+router.get("/earnings/export.csv", async (req, res) => {
+  const range = parseRange(req);
+  if (!range) return res.status(400).json({ error: "Invalid date range" });
+  const { from, to } = range;
+  const rows = await prisma.platformEarning.findMany({
+    where: { createdAt: { gte: from, lte: to } },
+    include: { payment: { select: { id: true, paymentType: true, payerId: true, assignmentId: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const header = ["date", "earningType", "paymentType", "paymentId", "assignmentId", "grossAmount", "platformFee", "providerPayout", "feePercent", "status"];
+  const escape = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    lines.push([
+      r.createdAt.toISOString(),
+      r.earningType, r.payment?.paymentType || "", r.paymentId,
+      r.payment?.assignmentId || "",
+      r.grossAmount, r.platformFee, r.providerPayout, r.feePercent, r.status,
+    ].map(escape).join(","));
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="earnings_${dayKey(from)}_to_${dayKey(to)}.csv"`);
+  res.send(lines.join("\n"));
+});
+
 // ---- Assignments ----
 router.get("/assignments", async (req, res) => {
   const { status } = req.query;

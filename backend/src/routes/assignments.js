@@ -8,6 +8,49 @@ import { notifyUser } from "../lib/notify.js";
 
 const router = Router();
 
+// -------- Budget intelligence (client posting helper) --------
+
+const CATEGORY_FLOOR = {
+  assignments_essays: 300,
+  ed_drawing: 500,
+  projects: 1500,
+  custom: 300,
+};
+const MIN_SAMPLE = 5;
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return Math.round(sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo));
+}
+
+router.get("/budget-stats", requireAuth, requireRole("client"), async (req, res) => {
+  const category = String(req.query.category || "");
+  const floor = CATEGORY_FLOOR[category] ?? CATEGORY_FLOOR.custom;
+  const rows = await prisma.assignmentRequest.findMany({
+    where: {
+      category: category || undefined,
+      finalPrice: { not: null },
+      status: { in: ["assigned", "in_progress", "review", "revision", "delivered", "completed"] },
+    },
+    select: { finalPrice: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  const prices = rows.map((r) => r.finalPrice).filter((n) => typeof n === "number").sort((a, b) => a - b);
+  if (prices.length < MIN_SAMPLE) {
+    return res.json({ category, sampleSize: prices.length, floor, p25: null, p50: null, p75: null, recommendedFrom: null, recommendedTo: null });
+  }
+  const p25 = percentile(prices, 0.25);
+  const p50 = percentile(prices, 0.50);
+  const p75 = percentile(prices, 0.75);
+  const recommendedFrom = percentile(prices, 0.40);
+  const recommendedTo = percentile(prices, 0.70);
+  res.json({ category, sampleSize: prices.length, floor, p25, p50, p75, recommendedFrom, recommendedTo });
+});
+
 // -------- Client: create + view own --------
 
 router.post("/request", requireAuth, requireRole("client"), async (req, res, next) => {
@@ -16,7 +59,13 @@ router.post("/request", requireAuth, requireRole("client"), async (req, res, nex
       title, description, subject, assignmentType, deadline,
       budgetMin, budgetMax, attachments,
       isHandwritten, handwrittenExtra,
+      category, customCategoryNote,
     } = req.body;
+    const allowedCategories = ["assignments_essays", "ed_drawing", "projects", "custom"];
+    const cat = category && allowedCategories.includes(category) ? category : null;
+    if (cat === "custom" && !customCategoryNote) {
+      return res.status(400).json({ error: "Describe the custom requirement" });
+    }
     if (!title || !description || !deadline) return res.status(400).json({ error: "Missing fields" });
     if (!budgetMax) return res.status(400).json({ error: "Maximum budget is required" });
     const dl = new Date(deadline);
@@ -24,7 +73,7 @@ router.post("/request", requireAuth, requireRole("client"), async (req, res, nex
       return res.status(400).json({ error: "Deadline must be at least 24h in the future" });
     }
 
-    const scan = scanMany(title, description);
+    const scan = scanMany(title, description, cat === "custom" ? customCategoryNote : null);
 
     const reqRow = await prisma.assignmentRequest.create({
       data: {
@@ -32,6 +81,8 @@ router.post("/request", requireAuth, requireRole("client"), async (req, res, nex
         title, description,
         subject: subject || null,
         assignmentType: assignmentType || null,
+        category: cat,
+        customCategoryNote: cat === "custom" ? String(customCategoryNote).slice(0, 600) : null,
         deadline: dl,
         budgetMin: budgetMin ? Number(budgetMin) : null,
         budgetMax: Number(budgetMax),

@@ -312,11 +312,35 @@ Full schema lives in `backend/prisma/schema.prisma`, heavily commented.
 | File uploads | **Real** | `multer` → local `uploads/` — swap to S3/R2 |
 | Audit log | **Real** | Every state change |
 | Socket.io admin notifications | **Real** | `user:<id>` rooms |
+| 4-category client posting | **Real** | `category` on `AssignmentRequest`: `assignments_essays`, `ed_drawing`, `projects`, `custom`. Custom requires a free-text note (also scanned). |
+| Bid-likelihood indicator (client posting) | **Real** | `GET /api/assignments/budget-stats?category=…` → percentile-based verdict once ≥5 completed jobs exist; otherwise a category-floor heuristic. Surfaces as Lower / Moderate / Higher next to the budget input. |
+| Admin earnings dashboard | **Real** | `GET /api/admin/earnings` + `/admin/earnings/export.csv`. Date presets (Today / 7d / 30d / This month / Last month / Custom), gross inflow + net platform fee + payout cards, daily stacked bar by source (assignments vs mentor sessions), vs-prev-period delta, CSV export. |
 | **Payments** | **MOCK** | `src/lib/payments.js` — `verifyPayment` accepts `signature: "MOCK_OK"`. Dev endpoint `POST /api/payments/mock-capture` flips a payment to captured without a real PSP. |
 | **Email** | **Optional** | Nodemailer if SMTP env set; else logs the body to server console |
 | Cron jobs | **Endpoints exist** | `/api/admin/cron/auto-complete`, `/stale-review-alert`, `/reconcile-payments`. Not scheduled — use `node-cron` in prod |
 | Mentor monthly subscriptions | **Schema only** | Row model exists, auto-renewal flow deferred |
 | Password reset, email verification | **Deferred** | Sprint 5 polish |
+
+---
+
+## Posting-intelligence: how the bid-likelihood indicator decides
+
+When a client picks a category and types a `budgetMax`, the New-Assignment page calls `GET /assignments/budget-stats?category=…` and shows a Lower / Moderate / Higher verdict.
+
+**Two regimes, automatic switchover:**
+
+1. **≥5 completed jobs in the category** → the endpoint returns p25 / p50 (median) / p75 of historical `finalPrice` plus a recommended range (p40–p70). The verdict is:
+   - `budgetMax < p25` → 🔴 Lower (suggests p40 to lift the budget)
+   - `p25 ≤ budgetMax ≤ p75` → 🟡 Moderate
+   - `budgetMax > p75` → 🟢 Higher
+2. **<5 samples** (cold start, fresh DB, or new category) → falls back to a per-category floor (`assignments_essays: 300`, `ed_drawing: 500`, `projects: 1500`, `custom: 300`). The verdict becomes:
+   - `< floor` → 🔴 Lower (suggests floor)
+   - `floor ≤ x < 1.6 × floor` → 🟡 Moderate (suggests `1.4 × floor`)
+   - `≥ 1.6 × floor` → 🟢 Higher
+
+The widget always tells the user which regime it's in (`median ₹X (n=…)` vs `category baseline`), so it's transparent and not a black box. The endpoint is client-role-only — no leakage of accepted-price data to doers.
+
+**Why this exists (business framing):** the biggest revenue leak at posting time is clients underpricing because they don't know market rates → no doers bid → no transaction. A small nudge here directly converts dead posts into completed jobs.
 
 ---
 

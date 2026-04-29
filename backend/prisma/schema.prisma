@@ -111,6 +111,8 @@ model AssignmentRequest {
   description    String
   subject        String?
   assignmentType String?
+  category       String?
+  customCategoryNote String?
   deadline       DateTime
   budgetMin      Int?
   budgetMax      Int?

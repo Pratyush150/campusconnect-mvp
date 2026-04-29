@@ -52,6 +52,7 @@ export default function AdminDashboard() {
         </div>
         <div className="page-actions">
           <Link to="/admin/assignments"><button>Assignments</button></Link>
+          <Link to="/admin/earnings"><button className="outline">Earnings</button></Link>
           <Link to="/admin/payouts"><button className="outline">Payouts</button></Link>
           <Link to="/admin/settings"><button className="outline">Settings</button></Link>
         </div>
@@ -59,12 +60,12 @@ export default function AdminDashboard() {
 
       {/* Hero KPIs */}
       <div className="kpi-hero">
-        <div className="kpi-card">
+        <Link to="/admin/earnings" className="kpi-card" style={{ textDecoration: "none", color: "inherit" }}>
           <div className="kpi-label">Platform earnings</div>
           <div className="kpi-value">₹{s.platformEarningsTotal.toLocaleString("en-IN")}</div>
-          <div className="kpi-delta up">+ ₹{s.last7d.platformFee.toLocaleString("en-IN")} last 7d</div>
+          <div className="kpi-delta up">+ ₹{s.last7d.platformFee.toLocaleString("en-IN")} last 7d · view breakdown →</div>
           <div className="kpi-icon" aria-hidden="true">💰</div>
-        </div>
+        </Link>
         <div className="kpi-card">
           <div className="kpi-label">Active assignments</div>
           <div className="kpi-value">{s.activeAssignments}</div>

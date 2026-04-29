@@ -27,6 +27,7 @@ import MyBookings from "./pages/MyBookings.jsx";
 
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminAssignments from "./pages/admin/AdminAssignments.jsx";
+import AdminEarnings from "./pages/admin/AdminEarnings.jsx";
 import AdminAssignmentDetail from "./pages/admin/AdminAssignmentDetail.jsx";
 import AdminDoers from "./pages/admin/AdminDoers.jsx";
 import AdminMentors from "./pages/admin/AdminMentors.jsx";
@@ -67,6 +68,7 @@ function Nav() {
       {user.role === "admin" && <>
         <NavLink to="/admin" className={cls}>Overview</NavLink>
         <NavLink to="/admin/assignments" className={cls}>Assignments</NavLink>
+        <NavLink to="/admin/earnings" className={cls}>Earnings</NavLink>
         <NavLink to="/admin/doers" className={cls}>Doers</NavLink>
         <NavLink to="/admin/mentors" className={cls}>Mentors</NavLink>
         <NavLink to="/admin/payouts" className={cls}>Payouts</NavLink>
@@ -118,6 +120,7 @@ export default function App() {
 
         <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminDashboard /></RequireRole>} />
         <Route path="/admin/assignments" element={<RequireRole roles={["admin"]}><AdminAssignments /></RequireRole>} />
+        <Route path="/admin/earnings" element={<RequireRole roles={["admin"]}><AdminEarnings /></RequireRole>} />
         <Route path="/admin/assignments/:id" element={<RequireRole roles={["admin"]}><AdminAssignmentDetail /></RequireRole>} />
         <Route path="/admin/doers" element={<RequireRole roles={["admin"]}><AdminDoers /></RequireRole>} />
         <Route path="/admin/mentors" element={<RequireRole roles={["admin"]}><AdminMentors /></RequireRole>} />
